@@ -13,7 +13,7 @@ class UserDataManager:
             self.user_data[user_id] = {
                 'state': State.IDLE,
                 'current_channel_post': {},
-                'user_profile' : load_file(os.getenv('USER_CHANNELS_FILE'))
+                'users_channels' : load_file(os.getenv('USER_CHANNELS_FILE'))
                 }
         return self.user_data[user_id]
 
@@ -27,6 +27,17 @@ class UserDataManager:
             return None
         else:
             return user_data['current_channel_post']
+        
+    def set_users_channels(self, user_id: int, users_channels) -> None:
+        user_data = self.get_user_data(user_id)
+        user_data['users_channels'] = [users_channels]
+
+    def get_users_channels(self, user_id: int):
+        user_data = self.get_user_data(user_id)
+        if not user_data['users_channels']:
+            return None
+        else:
+            return user_data['users_channels']
 
 
     def set_state(self, user_id: int, state: str) -> None:

@@ -14,9 +14,6 @@ from file_service import load_file, save_file
 # Настройка логирования
 logger = logging.getLogger(__name__)
 
-# Константы для идентификаторов канала и чата
-CHANNEL_ID = -1002326941935
-CHAT_ID = -1002355298602
 
 # Словарь для хранения данных о постах
 scheduled_channel_posts = load_file(os.getenv('CHANNEL_POSTS_FILE'))
@@ -48,15 +45,15 @@ async def handle_channel_message(update, context: CallbackContext) -> None:
     message = update.message
     if message.photo:
         user_id = update.message.from_user.id
-        photo_id = message.photo[-1].file_id
+        user_data_manager = context.bot_data.get("user_data_manager")
+        
         current_channel_post = {
             'message_id': message.message_id,
-            'photo_id': photo_id,
+            'photo_id': message.photo[-1].file_id,
             'text': message.caption if message.caption else "",
             'scheduled_time': None,
-            'channel_id' : CHANNEL_ID #TODO channel_id
+            'channel_id' : user_data_manager.get_users_channels(user_id)['channel_id']
         }
-        user_data_manager = context.bot_data.get("user_data_manager")
         user_data_manager.set_state(user_id, State.WAITING_TIME_FOR_CHANNEL_POST)
         await update.message.reply_text("Теперь отправьте дату и время публикации (формат: YYYY-MM-DD HH:MM).")
     else:
@@ -101,10 +98,11 @@ async def set_time(update, context: CallbackContext) -> None:
         append_post_by_user_id(user_id, os.getenv('CHANNEL_POSTS_FILE'))
         
         user_data_manager = context.bot_data.get("user_data_manager")
-        user_data_manager.reset_state(user_id)
+        user_data_manager.set_state(user_id, State.WAITING_CHAT_POSTS)
         user_data_manager.set_current_channel_post(user_id, current_channel_post)
         
         await update.message.reply_text(f"Пост будет опубликован {post_time.strftime('%Y-%m-%d %H:%M')}.")
+        await update.message.reply_text("Теперь пришлите файлы которые будут отправлены в комментарий")
     except ValueError:
         await update.message.reply_text("Ошибка! Проверьте формат даты и времени (YYYY-MM-DD HH:MM).")
     except Exception as e:
