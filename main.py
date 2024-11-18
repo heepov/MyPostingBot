@@ -1,9 +1,9 @@
 import os
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from dotenv import load_dotenv
 import logging
 from state_manager import StateManager
-from handlers import start, add_post, cancel, add_channel
+from handlers import start, add_post, cancel
 from new_channel_post import handle_channel_message, set_time, scheduler
 from states import State
 import json
@@ -29,11 +29,9 @@ async def handle_text(update, context):
 
     logger.info(f"Обработка сообщения от {user_id}. Состояние: {user_state_value}")
 
-    if user_state_value == State.WAITING_FOR_IMAGE:
+    if user_state_value == State.WAITING_CHANNEL_POST:
         await handle_channel_message(update, context)
-    elif user_state_value == State.WAITING_FOR_CHANNEL:
-        await set_time(update, context)
-    elif user_state_value == State.WAITING_FOR_TIME:
+    elif user_state_value == State.WAITING_TIME_FOR_CHANNEL_POST:
         await set_time(update, context)
     else:
         await update.message.reply_text("Я не понимаю это сообщение. Используйте команду /start для начала работы.")

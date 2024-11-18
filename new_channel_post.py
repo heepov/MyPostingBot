@@ -2,7 +2,6 @@ import json
 import os
 import logging
 from datetime import datetime
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 from telegram.ext import CallbackContext
@@ -53,7 +52,7 @@ async def handle_channel_message(update, context: CallbackContext) -> None:
         }
         
         state_manager = context.bot_data["state_manager"]
-        state_manager.set_state(user_id, State.WAITING_FOR_TIME)
+        state_manager.set_state(user_id, State.WAITING_TIME_FOR_CHANNEL_POST)
         await update.message.reply_text("Теперь отправьте дату и время публикации (формат: YYYY-MM-DD HH:MM).")
     else:
         await update.message.reply_text("Пожалуйста, отправьте изображение с текстом.")
@@ -65,7 +64,6 @@ async def set_time(update, context: CallbackContext) -> None:
         user_id = update.message.from_user.id
         datetime_str = update.message.text.strip()
 
-        logger.info(current_channel_post)
         if not current_channel_post:
             await update.message.reply_text("Сначала отправьте изображение с текстом.")
             return
@@ -98,7 +96,7 @@ async def set_time(update, context: CallbackContext) -> None:
         state_manager.reset_state(user_id)
         
         context.bot_data["current_channel_post"] = current_channel_post
-        await update.message.reply_text(f"Посты будут опубликованы {post_time.strftime('%Y-%m-%d %H:%M')}.")
+        await update.message.reply_text(f"Пост будет опубликован {post_time.strftime('%Y-%m-%d %H:%M')}.")
     except ValueError:
         await update.message.reply_text("Ошибка! Проверьте формат даты и времени (YYYY-MM-DD HH:MM).")
     except Exception as e:

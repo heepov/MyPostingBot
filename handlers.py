@@ -15,7 +15,7 @@ async def start(update: Update, context: CallbackContext) -> None:
 
 async def add_post(update: Update, context: CallbackContext) -> None:
     state_manager = context.bot_data["state_manager"]
-    state_manager.set_state(update.message.from_user.id, State.WAITING_FOR_IMAGE)
+    state_manager.set_state(update.message.from_user.id, State.WAITING_CHANNEL_POST)
     await update.message.reply_text("Пожалуйста, отправьте текст вашего поста и прикрепите картинку.")
 
 async def cancel(update: Update, context: CallbackContext) -> None:
@@ -23,7 +23,7 @@ async def cancel(update: Update, context: CallbackContext) -> None:
     state_manager.reset_state(update.message.from_user.id)
     await update.message.reply_text("Вы вышли в главное меню!")
 
-async def add_channel(update: Update, context: CallbackContext) -> None:
-    state_manager = context.bot_data["state_manager"]
-    state_manager.set_state(update.message.from_user.id, State.WAITING_ADD_CHANNEL)
-    await update.message.reply_text("Пожалуйста, ссылку на ваш КАНАЛ.")
+# async def add_channel(update: Update, context: CallbackContext) -> None:
+#     state_manager = context.bot_data["state_manager"]
+#     state_manager.set_state(update.message.from_user.id, State.WAITING_ADD_CHANNEL)
+#     await update.message.reply_text("Пожалуйста, ссылку на ваш КАНАЛ.")
