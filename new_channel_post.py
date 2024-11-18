@@ -23,14 +23,6 @@ current_channel_post = {}
 # Создаем объект планировщика
 scheduler = BackgroundScheduler()
 
-# Загружаем посты из файла
-def load_channel_posts():
-    if os.path.exists(os.getenv('CHANNEL_POSTS_FILE')):
-        with open(os.getenv('CHANNEL_POSTS_FILE'), 'r') as f:
-            return json.load(f)
-    return {}
-
-
 # Сохраняем посты в файл
 def save_channel_posts():
     # Открываем файл для добавления данных, а не перезаписи
@@ -53,13 +45,15 @@ async def handle_channel_message(update, context: CallbackContext) -> None:
 
     message = update.message
     if message.photo:
-        user_id = update.message.from_user.id        
+        user_id = update.message.from_user.id
+        photo_id = message.photo[-1].file_id
+        
         current_channel_post = {
             'message_id': message.message_id,
-            'photo_id': message.photo[-1].file_id,
+            'photo_id': photo_id,
             'text': message.caption if message.caption else "",
             'scheduled_time': None,
-            'channel_id' : None
+            'channel_id' : None #TODO channel_id
         }
         
         state_manager = context.bot_data["state_manager"]
