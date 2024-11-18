@@ -31,8 +31,6 @@ def save_channel_posts():
 
 # Функция для добавления нового поста
 def add_new_channel_post(user_id):
-    global scheduled_channel_posts, current_channel_post
-
     if user_id not in scheduled_channel_posts:
         scheduled_channel_posts[user_id] = []
     
@@ -42,66 +40,23 @@ def add_new_channel_post(user_id):
 # Функция для обработки сообщений с изображением и текстом
 async def handle_channel_message(update, context: CallbackContext) -> None:
     global current_channel_post
-
     message = update.message
     if message.photo:
         user_id = update.message.from_user.id
         photo_id = message.photo[-1].file_id
-        
         current_channel_post = {
             'message_id': message.message_id,
             'photo_id': photo_id,
             'text': message.caption if message.caption else "",
             'scheduled_time': None,
-            'channel_id' : None #TODO channel_id
+            'channel_id' : CHANNEL_ID #TODO channel_id
         }
         
         state_manager = context.bot_data["state_manager"]
-        state_manager.set_state(user_id, State.WAITING_ADD_CHANNEL)
-        await update.message.reply_text("Теперь выберите, куда будет отправлен пост:", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("КАНАЛ", callback_data="set_channel"),
-             InlineKeyboardButton("ЧАТ", callback_data="set_chat")]
-        ]))
+        state_manager.set_state(user_id, State.WAITING_FOR_TIME)
+        await update.message.reply_text("Теперь отправьте дату и время публикации (формат: YYYY-MM-DD HH:MM).")
     else:
         await update.message.reply_text("Пожалуйста, отправьте изображение с текстом.")
-
-# Обработчик для установки ID канала/чата
-async def set_channel_type(update, context: CallbackContext) -> None:
-    # Создаем кнопки
-    buttons = [
-        [
-            InlineKeyboardButton("КАНАЛ", callback_data="set_channel"),
-            InlineKeyboardButton("ЧАТ", callback_data="set_chat")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(buttons)
-    await update.message.reply_text("Выберите, куда будет отправлен пост:", reply_markup=reply_markup)
-
-# Обработчик нажатий кнопок
-async def button_callback(update, context: CallbackContext) -> None:
-    global current_channel_post
-    
-    user_id = update.callback_query.from_user.id
-    state_manager = context.bot_data["state_manager"]
-    state_manager.set_state(user_id, State.WAITING_ADD_CHANNEL)
-    
-    query = update.callback_query
-    await query.answer()  # Подтверждение нажатия кнопки
-
-    # Получаем ID канала/чата, куда нужно отправить посты
-    new_channel_id = CHANNEL_ID if query.data == "set_channel" else CHAT_ID
-
-    current_channel_post['channel_id'] = new_channel_id
-    
-    # Ответ пользователю
-    if query.data == "set_channel":
-        await query.edit_message_text("Сообщения будут отправлены в КАНАЛ.")
-    elif query.data == "set_chat":
-        await query.edit_message_text("Сообщения будут отправлены в ЧАТ.")
-    
-    state_manager = context.bot_data["state_manager"]
-    state_manager.set_state(user_id, State.WAITING_FOR_TIME)
-    await query.message.reply_text("Теперь отправьте дату и время публикации (формат: YYYY-MM-DD HH:MM).")
 
 # Установка времени для публикации
 async def set_time(update, context: CallbackContext) -> None:
@@ -141,6 +96,8 @@ async def set_time(update, context: CallbackContext) -> None:
         add_new_channel_post(user_id)
         state_manager = context.bot_data["state_manager"]
         state_manager.reset_state(user_id)
+        
+        context.bot_data["current_channel_post"] = current_channel_post
         await update.message.reply_text(f"Посты будут опубликованы {post_time.strftime('%Y-%m-%d %H:%M')}.")
     except ValueError:
         await update.message.reply_text("Ошибка! Проверьте формат даты и времени (YYYY-MM-DD HH:MM).")

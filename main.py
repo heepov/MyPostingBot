@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import logging
 from state_manager import StateManager
 from handlers import start, add_post, cancel, add_channel
-from new_channel_post import handle_channel_message, set_channel_type, button_callback, set_time, scheduler
+from new_channel_post import handle_channel_message, set_time, scheduler
 from states import State
 import json
 
@@ -39,28 +39,29 @@ async def handle_text(update, context):
         await update.message.reply_text("Я не понимаю это сообщение. Используйте команду /start для начала работы.")
 
 async def check_channel_post(update, context):
-    await update.message.reply_text(update.message)
+    logger.info(context.bot_data["current_channel_post"])
+    if update.message.photo[-1].file_id == context.bot_data["current_channel_post"]['photo_id']:
+        await update.message.reply_text("ЕБАШЬ ПОРНО!")
+    else:
+        await update.message.reply_text(context.bot_data["current_channel_post"])
 
 # Основная функция
 def main() -> None:
-    global scheduled_channel_posts, current_channel_post
+    global scheduled_channel_posts
     scheduled_channel_posts = load_channel_posts(os.getenv('CHANNEL_POSTS_FILE'))  # Теперь загружаем посты из файла
-    current_channel_post = {}
-
+    
     # Инициализация приложения и планировщика
     application = Application.builder().token(os.getenv('BOT_TOKEN')).build()
     state_manager = StateManager()
+    
     application.bot_data["state_manager"] = state_manager
-
     # Планировщик передается в обработчики
     application.bot_data["scheduler"] = scheduler
+    application.bot_data["current_channel_post"] = {}
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("add_post", add_post))
     application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(CommandHandler("add_channel", add_channel))
-    application.add_handler(CommandHandler("set_channel", set_channel_type))
-    application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(~filters.COMMAND, check_channel_post))
     
