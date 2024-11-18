@@ -3,6 +3,7 @@
 import logging
 from telegram import Bot
 
+
 async def check_if_bot_is_admin(bot: Bot, chat_id: int):
     """Проверка, является ли бот администратором канала или чата."""
     try:
