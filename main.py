@@ -10,95 +10,69 @@ import asyncio
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackQueryHandler
 from dotenv import load_dotenv
+from utils import check_if_bot_is_admin 
+from state_manager import StateManager
+from handlers import start, add_post, cancel, add_channel
+from states import State
 
-
-# Загружаем переменные из .env файла
 load_dotenv()
-# Теперь вы можете использовать токен как переменную окружения
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-
-USER_STATE_WAITING_FOR_IMAGE = 'waiting_for_image'
-USER_STATE_WAITING_FOR_CHANNEL = 'waiting_for_channel'
-USER_STATE_WAITING_FOR_TIME = 'waiting_for_time'
-USER_STATE_IDLE = 'idle'
-
-# Константы для идентификаторов канала и чата
-CHANNEL_ID = -1002326941935  # Замените на ID вашего канала
-CHAT_ID = -1002355298602  # Замените на ID вашего чата
 
 # Настройка логирования
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Путь к файлу для хранения постов
-POSTS_FILE = 'posts.json'
+# Константы для идентификаторов канала и чата
+CHANNEL_ID = -1002326941935
+CHAT_ID = -1002355298602
 
 # Словарь для хранения данных о постах
-scheduled_posts = {}
-current_post={}
+scheduled_channel_posts = {}
+current_channel_post={}
 
-user_state = {}
+# Создаем объект планировщика
+scheduler = BackgroundScheduler()
 
 # Загружаем существующие посты из файла
-def load_posts():
-    if os.path.exists(POSTS_FILE):
-        with open(POSTS_FILE, 'r') as f:
+def load_channel_posts():
+    if os.path.exists(os.getenv('CHANNEL_POSTS_FILE')):
+        with open(os.getenv('CHANNEL_POSTS_FILE'), 'r') as f:
             return json.load(f)
     return {}
 
 # Сохраняем посты в файл
-def save_posts():
+def save_channel_posts():
     # Открываем файл для добавления данных, а не перезаписи
-    with open(POSTS_FILE, 'w') as f:
-        json.dump(scheduled_posts, f, indent=4)
+    with open(os.getenv('CHANNEL_POSTS_FILE'), 'w') as f:
+        json.dump(scheduled_channel_posts, f, indent=4)
         
 # Функция для добавления нового поста
-def add_new_post(user_id):
-    global scheduled_posts, current_post
+def add_new_channel_post(user_id):
+    global scheduled_channel_posts, current_channel_post
 
-    if user_id not in scheduled_posts:
-        scheduled_posts[user_id] = []
+    if user_id not in scheduled_channel_posts:
+        scheduled_channel_posts[user_id] = []
     
-    scheduled_posts[user_id].append(current_post.copy())  # Добавляем новый пост в список
-    save_posts()  # Сохраняем изменения
-    
-    
-# Создаем объект планировщика
-scheduler = BackgroundScheduler()
+    scheduled_channel_posts[user_id].append(current_channel_post.copy())
+    save_channel_posts()
 
-# Команда /start
-async def start(update: Update, context: CallbackContext) -> None:
-    if update.effective_chat.type != 'private':
-        return  # Игнорируем команды, не из личных сообщений
-    user_state[update.message.from_user.id] = USER_STATE_IDLE  # Устанавливаем состояние в 'idle' при старте
-    await update.message.reply_text("Привет! Отправь команду /add_post для добавления поста.")
-
-# Команда /add_post
-async def add_post(update: Update, context: CallbackContext) -> None:
-    user_state[update.message.from_user.id] = USER_STATE_WAITING_FOR_IMAGE  # Устанавливаем состояние в 'waiting_for_image'
-    await update.message.reply_text("Пожалуйста, отправьте текст вашего поста и прикрепите картинку.")
 
 # Функция для обработки сообщений с изображением и текстом
-async def handle_message(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    if user_state.get(user_id) != USER_STATE_WAITING_FOR_IMAGE:
-        return  # Игнорируем сообщения, если пользователь не в нужном состоянии
-    
-    if update.effective_chat.type != 'private':
-        return  # Игнорируем сообщения не из личных чатов
+async def handle_channel_message(update: Update, context: CallbackContext) -> None:
+    global current_channel_post
 
     message = update.message
-    global current_post
-    
     if message.photo:
-        current_post = {
+        user_id = update.message.from_user.id        
+        current_channel_post = {
             'message_id': message.message_id,
             'photo_id': message.photo[-1].file_id,
             'text': message.caption if message.caption else "",
             'scheduled_time': None,
             'channel_id' : None
         }
-        user_state[user_id] = USER_STATE_WAITING_FOR_CHANNEL  # Переходим к состоянию выбора канала
+        
+        state_manager = context.bot_data["state_manager"]
+        state_manager.set_state(user_id, State.WAITING_ADD_CHANNEL)
         await update.message.reply_text("Теперь выберите, куда будет отправлен пост:", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("КАНАЛ", callback_data="set_channel"),
              InlineKeyboardButton("ЧАТ", callback_data="set_chat")]
@@ -107,9 +81,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("Пожалуйста, отправьте изображение с текстом.")
         
 # Обработчик для установки ID канала/чата
-async def set_channel_id(update: Update, context: CallbackContext) -> None:
-    if update.effective_chat.type != 'private':
-        return  # Игнорируем сообщения не из личных чатов
+async def set_channel_type(update: Update, context: CallbackContext) -> None:
 
     # Создаем кнопки
     buttons = [
@@ -123,19 +95,21 @@ async def set_channel_id(update: Update, context: CallbackContext) -> None:
 
 # Обработчик нажатий кнопок
 async def button_callback(update: Update, context: CallbackContext) -> None:
+    global current_channel_post
+    
     user_id = update.callback_query.from_user.id
-    if user_state.get(user_id) != USER_STATE_WAITING_FOR_CHANNEL:
-        return  # Игнорируем выбор, если пользователь не в нужном состоянии
+    state_manager = context.bot_data["state_manager"]
+    state_manager.set_state(user_id, State.WAITING_ADD_CHANNEL)
     
     query = update.callback_query
-    global current_post
+    
     
     await query.answer()  # Подтверждение нажатия кнопки
 
     # Получаем ID канала/чата, куда нужно отправить посты
     new_channel_id = CHANNEL_ID if query.data == "set_channel" else CHAT_ID
 
-    current_post['channel_id'] = new_channel_id
+    current_channel_post['channel_id'] = new_channel_id
     
     # Ответ пользователю
     if query.data == "set_channel":
@@ -143,25 +117,19 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     elif query.data == "set_chat":
         await query.edit_message_text("Сообщения будут отправлены в ЧАТ.")
     
-    user_state[user_id] = USER_STATE_WAITING_FOR_TIME  # Переходим к состоянию ожидания времени публикации
+    state_manager = context.bot_data["state_manager"]
+    state_manager.set_state(user_id, State.WAITING_FOR_TIME)
     await query.message.reply_text("Теперь отправьте дату и время публикации (формат: YYYY-MM-DD HH:MM).")
 
 # Установка времени для публикации
 async def set_time(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    if user_state.get(user_id) != USER_STATE_WAITING_FOR_TIME:
-        return  # Игнорируем сообщения, если пользователь не в нужном состоянии
-    
-    if update.effective_chat.type != 'private':
-        return  # Игнорируем сообщения, не из личных чатов
-    
-    global current_post
+    global current_channel_post
     try:
         user_id = update.message.from_user.id
         datetime_str = update.message.text.strip()
 
-        logger.info(current_post)
-        if not current_post:
+        logger.info(current_channel_post)
+        if not current_channel_post:
             await update.message.reply_text("Сначала отправьте изображение с текстом.")
             return
 
@@ -170,13 +138,13 @@ async def set_time(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text("Дата и время должны быть позже текущего момента.")
             return
 
-        if not current_post["channel_id"]:
+        if not current_channel_post["channel_id"]:
             await update.message.reply_text("Сначала укажите ID канала.")
             return
 
         # Обновляем только scheduled_time
-        current_post['scheduled_time'] = post_time.strftime("%Y-%m-%d %H:%M")
-        job_id = f"{user_id}_{current_post['message_id']}_{current_post['scheduled_time']}"
+        current_channel_post['scheduled_time'] = post_time.strftime("%Y-%m-%d %H:%M")
+        job_id = f"{user_id}_{current_channel_post['message_id']}_{current_channel_post['scheduled_time']}"
 
         if not scheduler.get_job(job_id):
             trigger = DateTrigger(run_date=post_time)
@@ -184,12 +152,13 @@ async def set_time(update: Update, context: CallbackContext) -> None:
             scheduler.add_job(
                 forward_post_async,
                 trigger,
-                args=[context.bot, current_post['channel_id'], current_post['text'], current_post['photo_id'], user_id, current_post['message_id'], update.message.chat_id],
+                args=[context.bot, current_channel_post['channel_id'], current_channel_post['text'], current_channel_post['photo_id'], user_id, current_channel_post['message_id'], update.message.chat_id],
                 id=job_id
             )
 
-        add_new_post(user_id)
-        user_state[user_id] = USER_STATE_IDLE  # Завершаем процесс и возвращаемся к состоянию 'idle'
+        add_new_channel_post(user_id)
+        state_manager = context.bot_data["state_manager"]
+        state_manager.reset_state(user_id)
         await update.message.reply_text(f"Посты будут опубликованы {post_time.strftime('%Y-%m-%d %H:%M')}.")
     except ValueError:
         await update.message.reply_text("Ошибка! Проверьте формат даты и времени (YYYY-MM-DD HH:MM).")
@@ -197,12 +166,12 @@ async def set_time(update: Update, context: CallbackContext) -> None:
         logger.error(f"Error in set_time: {e}")
         await update.message.reply_text("Произошла ошибка. Попробуйте снова.")
       
-#   
+# Сохраняем изменения после удаления
 def remove_post(user_id, message_id):
-    global scheduled_posts
-    if user_id in scheduled_posts:
-        scheduled_posts[user_id] = [post for post in scheduled_posts[user_id] if post['message_id'] != message_id]
-        save_posts()  # Сохраняем изменения после удаления
+    global scheduled_channel_posts
+    if user_id in scheduled_channel_posts:
+        scheduled_channel_posts[user_id] = [post for post in scheduled_channel_posts[user_id] if post['message_id'] != message_id]
+        save_channel_posts() 
         
 # Пересылка сообщения и удаление сообщения из чата с ботом
 async def forward_post(bot, chat_id, text, photo_id, user_id, message_id, user_chat_id):
@@ -226,21 +195,42 @@ def forward_post_async(bot, chat_id, text, photo_id, user_id, message_id, user_c
     asyncio.set_event_loop(loop)
     loop.run_until_complete(forward_post(bot, chat_id, text, photo_id, user_id, message_id, user_chat_id))
 
+async def handle_text(update: Update, context: CallbackContext) -> None:
+    state_manager = context.bot_data["state_manager"]  # Извлекаем state_manager
+    user_id = update.message.from_user.id
+    user_state_value = state_manager.get_state(user_id)
+    
+    logger.info(f"Обработка сообщения от {user_id}. Состояние: {user_state_value}")
+    
+    if user_state_value == State.WAITING_FOR_IMAGE:
+        await handle_channel_message(update, context)
+    elif user_state_value == State.WAITING_FOR_CHANNEL:
+        await set_time(update, context)
+    elif user_state_value == State.WAITING_FOR_TIME:
+        await set_time(update, context)
+    else:
+        await update.message.reply_text("Я не понимаю это сообщение. Используйте команду /start для начала работы.")
+
 # Основная функция
 def main() -> None:
-    global scheduled_posts, current_post
-    scheduled_posts = load_posts()
-    current_post = {}
+    global scheduled_channel_posts, current_channel_post
+    scheduled_channel_posts = load_channel_posts()
+    current_channel_post = {}
 
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token(os.getenv('BOT_TOKEN')).build()
+    state_manager = StateManager()
+    application.bot_data["state_manager"] = state_manager
+
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("add_post", add_post))
-    application.add_handler(CommandHandler("set_channel", set_channel_id))  # Команда выбора канала/чата
+    application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CommandHandler("set_channel", set_channel_type))  # Команда выбора канала/чата
+    application.add_handler(CommandHandler("add_channel", add_channel))
     application.add_handler(CallbackQueryHandler(button_callback))  # Обработчик кнопок
-    application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND, set_time))  # Обрабатываем время публикации
-    application.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE, handle_message))
     
+    
+    application.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, handle_text))
 
     scheduler.start()
     application.run_polling()
