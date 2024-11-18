@@ -1,13 +1,15 @@
-import json
+# new_channel_post.py
+
 import os
 import logging
 from datetime import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 from telegram.ext import CallbackContext
 import asyncio
+
 from states import State
 from file_service import load_file, save_file
+
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -19,9 +21,6 @@ CHAT_ID = -1002355298602
 # Словарь для хранения данных о постах
 scheduled_channel_posts = load_file(os.getenv('CHANNEL_POSTS_FILE'))
 current_channel_post = {}
-
-# Создаем объект планировщика
-scheduler = BackgroundScheduler()
 
 # Добавляет новые данные к существующему ключу в файле.
 # Если ключ отсутствует, создаёт его с новым списком.
@@ -57,9 +56,8 @@ async def handle_channel_message(update, context: CallbackContext) -> None:
             'scheduled_time': None,
             'channel_id' : CHANNEL_ID #TODO channel_id
         }
-        
-        state_manager = context.bot_data["state_manager"]
-        state_manager.set_state(user_id, State.WAITING_TIME_FOR_CHANNEL_POST)
+        user_data_manager = context.bot_data.get("user_data_manager")
+        user_data_manager.set_state(user_id, State.WAITING_TIME_FOR_CHANNEL_POST)
         await update.message.reply_text("Теперь отправьте дату и время публикации (формат: YYYY-MM-DD HH:MM).")
     else:
         await update.message.reply_text("Пожалуйста, отправьте изображение с текстом.")
@@ -88,6 +86,8 @@ async def set_time(update, context: CallbackContext) -> None:
         current_channel_post['scheduled_time'] = post_time.strftime("%Y-%m-%d %H:%M")
         job_id = f"{user_id}_{current_channel_post['message_id']}_{current_channel_post['scheduled_time']}"
 
+        scheduler = context.bot_data["scheduler"]
+        
         if not scheduler.get_job(job_id):
             trigger = DateTrigger(run_date=post_time)
             
@@ -100,10 +100,10 @@ async def set_time(update, context: CallbackContext) -> None:
 
         append_post_by_user_id(user_id, os.getenv('CHANNEL_POSTS_FILE'))
         
-        state_manager = context.bot_data["state_manager"]
-        state_manager.reset_state(user_id)
+        user_data_manager = context.bot_data.get("user_data_manager")
+        user_data_manager.reset_state(user_id)
+        user_data_manager.set_current_channel_post(user_id, current_channel_post)
         
-        context.bot_data["current_channel_post"] = current_channel_post
         await update.message.reply_text(f"Пост будет опубликован {post_time.strftime('%Y-%m-%d %H:%M')}.")
     except ValueError:
         await update.message.reply_text("Ошибка! Проверьте формат даты и времени (YYYY-MM-DD HH:MM).")
