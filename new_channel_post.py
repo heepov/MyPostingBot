@@ -7,6 +7,7 @@ from apscheduler.triggers.date import DateTrigger
 from telegram.ext import CallbackContext
 import asyncio
 from states import State
+from file_service import load_file, save_file
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -16,25 +17,31 @@ CHANNEL_ID = -1002326941935
 CHAT_ID = -1002355298602
 
 # Словарь для хранения данных о постах
-scheduled_channel_posts = {}
+scheduled_channel_posts = load_file(os.getenv('CHANNEL_POSTS_FILE'))
 current_channel_post = {}
 
 # Создаем объект планировщика
 scheduler = BackgroundScheduler()
 
-# Сохраняем посты в файл
-def save_channel_posts():
-    # Открываем файл для добавления данных, а не перезаписи
-    with open(os.getenv('CHANNEL_POSTS_FILE'), 'w') as f:
-        json.dump(scheduled_channel_posts, f, indent=4)
+# Добавляет новые данные к существующему ключу в файле.
+# Если ключ отсутствует, создаёт его с новым списком.
+def append_post_by_user_id(user_id, file_name):
+    global scheduled_channel_posts, current_channel_post 
+    if user_id in scheduled_channel_posts:
+        if isinstance(scheduled_channel_posts[user_id], list):  # Убедимся, что значение ключа — это список
+            scheduled_channel_posts[user_id].append(current_channel_post)
+        else:
+            logger.error(f"ValueError Значение для ключа {user_id} не является списком.")
+    else:
+        # Если ключа нет, создаём его с новым списком
+        scheduled_channel_posts[user_id] = [current_channel_post]
+    save_file(scheduled_channel_posts, file_name)
 
-# Функция для добавления нового поста
-def add_new_channel_post(user_id):
-    if user_id not in scheduled_channel_posts:
-        scheduled_channel_posts[user_id] = []
-    
-    scheduled_channel_posts[user_id].append(current_channel_post.copy())
-    save_channel_posts()
+def delete_post_by_user_id(user_id, message_id, file_name):
+    global scheduled_channel_posts
+    if user_id in scheduled_channel_posts:
+        scheduled_channel_posts[user_id] = [post for post in scheduled_channel_posts[user_id] if post['message_id'] != message_id]
+        save_file(scheduled_channel_posts, file_name)
 
 # Функция для обработки сообщений с изображением и текстом
 async def handle_channel_message(update, context: CallbackContext) -> None:
@@ -91,7 +98,8 @@ async def set_time(update, context: CallbackContext) -> None:
                 id=job_id
             )
 
-        add_new_channel_post(user_id)
+        append_post_by_user_id(user_id, os.getenv('CHANNEL_POSTS_FILE'))
+        
         state_manager = context.bot_data["state_manager"]
         state_manager.reset_state(user_id)
         
@@ -115,7 +123,7 @@ async def forward_post(bot, chat_id, text, photo_id, user_id, message_id, user_c
         logger.info(f"Message {message_id} deleted from chat with bot.")
 
         # Удаляем пост из файла
-        remove_post(user_id, message_id)
+        delete_post_by_user_id(user_id, message_id, os.getenv('CHANNEL_POSTS_FILE'))
     except Exception as e:
         logger.error(f"Error forwarding post: {e}")
 
@@ -124,10 +132,3 @@ def forward_post_async(bot, chat_id, text, photo_id, user_id, message_id, user_c
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(forward_post(bot, chat_id, text, photo_id, user_id, message_id, user_chat_id))
-
-# Сохраняем изменения после удаления
-def remove_post(user_id, message_id):
-    global scheduled_channel_posts
-    if user_id in scheduled_channel_posts:
-        scheduled_channel_posts[user_id] = [post for post in scheduled_channel_posts[user_id] if post['message_id'] != message_id]
-        save_channel_posts()
