@@ -4,12 +4,13 @@ import os
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from dotenv import load_dotenv
 import logging
-from states import State
+from states import State, get_user_state
 from telegram import User
 from apscheduler.schedulers.background import BackgroundScheduler
+from telegram.ext import ContextTypes
 
 from user_data_manager import UserDataManager
-from handlers import start, add_post, add_channel, cancel, end
+from handlers import start, add, setup, cancel, end, checkup, menu
 from new_channel_post import handle_channel_message, set_time
 from add_channel import add_channel_link, add_chat_link
 from new_chat_post import media_group_message, send_chat_posts
@@ -29,10 +30,9 @@ load_dotenv()
 
 async def handle_text(update, context):
     user_id = update.message.from_user.id
-    user_data_manager = context.bot_data.get("user_data_manager")
-    user_state_value = user_data_manager.get_state(user_id)
-    # chat_id = user_data_manager.get_users_channels(user_id)['chat_id']
-    # photo_id = "AgACAgIAAxkBAAIG4Wc7cJozFjEI1mVTpW5Iwzv6kUG5AALa7TEbxdPZSXh3bpAwrQPAAQADAgADeAADNgQ"
+    # user_data_manager = context.bot_data.get("user_data_manager")
+    # user_state_value = user_data_manager.get_state(user_id)
+    user_state_value = get_user_state(context)
 
     logger.info(f"Обработка сообщения от {user_id}. Состояние: {user_state_value}")
 
@@ -52,14 +52,44 @@ async def handle_text(update, context):
         )
 
 
+# async def handle_reply_to_chat(update, context):
+#     logger.info("!!!handle_reply_to_chat!!!")
+#     if (
+#         not update.message.reply_to_message
+#         and update.message.from_user.first_name == "Telegram"
+#         and update.message.chat.id == context.bot_data["user_chat"].get("chat_id")
+#     ):
+#         logger.info(str(update.message))
+#         this_photo_id = update.message.photo[-1].file_id
+#         if this_photo_id in load_file(os.getenv("CHAT_POSTS_FILE")):
+#             # await send_chat_posts(update, context, this_photo_id)
+#             await send_chat_posts(update, context)
 async def handle_reply_to_chat(update, context):
+    logger.info("!!!handle_reply_to_chat!!!")
+
+    # Проверяем, что `update.message` не равно `None`
+    if not update.message:
+        logger.warning("Сообщение отсутствует в обновлении.")
+        return
+
+    # Проверяем, что `reply_to_message` отсутствует
     if (
         not update.message.reply_to_message
         and update.message.from_user.first_name == "Telegram"
+        and update.message.chat.id
+        == context.bot_data.get("user_chat", {}).get("chat_id")
     ):
-        this_photo_id = update.message.photo[-1].file_id
-        if this_photo_id in load_file(os.getenv("CHAT_POSTS_FILE")):
-            await send_chat_posts(update, context, this_photo_id)
+        logger.info(str(update.message))
+
+        # Проверяем, что `photo` существует и не пустой
+        if update.message.photo and len(update.message.photo) > 0:
+            this_photo_id = update.message.photo[-1].file_id
+
+            # Проверяем наличие `this_photo_id` в файле
+            if this_photo_id in load_file(os.getenv("CHAT_POSTS_FILE")):
+                await send_chat_posts(update, context)
+        else:
+            logger.warning("Фото в сообщении отсутствует.")
 
 
 # Основная функция
@@ -72,22 +102,27 @@ def main() -> None:
     application.bot_data["user_data_manager"] = UserDataManager()
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("add_post", add_post))
-    application.add_handler(CommandHandler("add_channel", add_channel))
+    application.add_handler(CommandHandler("add", add))
+    application.add_handler(CommandHandler("setup", setup))
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler("end", end))
+    application.add_handler(CommandHandler("checkup", checkup))
+    application.add_handler(CommandHandler("menu", menu))
 
+    # try:
+    #     application.add_handler(
+    #         MessageHandler(
+    #             filters.Chat(application.bot_data["user_chat"].get("chat_id"))
+    #             & ~filters.COMMAND,
+    #             handle_reply_to_chat,
+    #         )
+    #     )
+    # except Exception as e:
+    #     logger.error(f"Error: {e}")
     application.add_handler(
         MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, handle_text)
     )
-    application.add_handler(
-        MessageHandler(
-            filters.Chat(load_file(os.getenv("USER_CHANNELS_FILE"))["chat_id"])
-            & ~filters.COMMAND,
-            handle_reply_to_chat,
-        )
-    )
-
+    application.add_handler(MessageHandler(~filters.COMMAND, handle_reply_to_chat))
     # Запуск планировщика
     scheduler.start()
 
@@ -96,11 +131,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-# async def check_channel_post(update, context):
-#     logger.info(context.bot_data["current_channel_post"])
-#     if update.message.photo[-1].file_id == context.bot_data["current_channel_post"]['photo_id']:
-#         await update.message.reply_text("ЕБАШЬ ПОРНО!")
-#     else:
-#         await update.message.reply_text(context.bot_data["current_channel_post"])

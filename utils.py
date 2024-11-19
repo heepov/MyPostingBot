@@ -1,7 +1,10 @@
 # utils.py
 
 import logging
+import os
 from telegram import Bot
+from file_service import load_file
+from states import State
 
 
 async def check_if_bot_is_admin(bot: Bot, chat_id: int):
@@ -17,3 +20,6 @@ async def check_if_bot_is_admin(bot: Bot, chat_id: int):
     except Exception as e:
         logging.error(f"Ошибка при проверке прав бота в чате {chat_id}: {e}")
         return False
+
+
+

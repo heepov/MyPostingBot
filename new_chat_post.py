@@ -51,6 +51,13 @@ def append_post_by_photo_id(photo_id, msg_dict, file_name):
     save_file(scheduled_chat_posts, file_name)
 
 
+def remove_key_from_file(file_name: str, key_to_remove):
+    global scheduled_chat_posts
+    if key_to_remove in scheduled_chat_posts:
+        del scheduled_chat_posts[key_to_remove]
+    save_file(scheduled_chat_posts, file_name)
+
+
 class MsgDict(TypedDict):
     media_type: Literal["video", "photo", "document", "audio"]
     media_id: str
@@ -63,6 +70,7 @@ async def media_group_sender(
     context: ContextTypes.DEFAULT_TYPE, chat_id, reply_to_message_id
 ):
     """Отправляет медиагруппу после ожидания"""
+    logger.info("!!!media_group_sender!!!")
     media = []
     for msg in context.job.data[0]:
         media_type = MEDIA_GROUP_TYPES[msg["media_type"]]
@@ -87,14 +95,14 @@ async def media_group_sender(
 
 
 async def media_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает новые сообщения и отправляет их в медиагруппу или одиночные"""
     message = update.effective_message
     media_type = effective_message_type(message)
 
     user_id = update.message.from_user.id
-    user_data_manager = context.bot_data.get("user_data_manager")
-    chat_id = user_data_manager.get_users_channels(user_id)["chat_id"]
-    photo_id = user_data_manager.get_current_channel_post(user_id)["photo_id"]
+    # user_data_manager = context.bot_data.get("user_data_manager")
+    # chat_id = user_data_manager.get_users_channels(user_id)["chat_id"]
+    # photo_id = user_data_manager.get_current_channel_post(user_id)["photo_id"]
+    photo_id = context.bot_data["file_id"]
 
     media_id = (
         message.photo[-1].file_id
@@ -109,16 +117,18 @@ async def media_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         media_group_id=message.media_group_id,
     )
     append_post_by_photo_id(photo_id, msg_dict, os.getenv("CHAT_POSTS_FILE"))
-    await update.message.reply_text(
-        "Дождитесь пока загрузятся все файлы и после этого введите команду /end"
-    )
 
 
-async def send_chat_posts(update: Update, context: ContextTypes.DEFAULT_TYPE, photo_id):
+# async def send_chat_posts(update: Update, context: ContextTypes.DEFAULT_TYPE, photo_id):
+async def send_chat_posts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("!!!send_chat_posts!!!")
     reply_to_message_id = update.message.message_id
-    chat_id = load_file(os.getenv("USER_CHANNELS_FILE"))["chat_id"]
+    # chat_id = load_file(os.getenv("USER_CHANNELS_FILE"))["chat_id"]
+    chat_id = context.bot_data["user_chat"].get("chat_id")
 
-    msg_dict = load_file(os.getenv("CHAT_POSTS_FILE"))[photo_id]
+    # msg_dict = load_file(os.getenv("CHAT_POSTS_FILE"))[photo_id]
+    msg_dict = scheduled_chat_posts[context.bot_data["file_id"]]
+    remove_key_from_file(os.getenv("CHAT_POSTS_FILE"), context.bot_data["file_id"])
     media_group_id = msg_dict[0]["media_group_id"]
 
     jobs = context.job_queue.get_jobs_by_name(media_group_id)

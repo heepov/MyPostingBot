@@ -7,7 +7,7 @@ from apscheduler.triggers.date import DateTrigger
 from telegram.ext import CallbackContext
 import asyncio
 
-from states import State
+from states import State, set_user_state
 from file_service import load_file, save_file
 
 
@@ -56,16 +56,17 @@ async def handle_channel_message(update, context: CallbackContext) -> None:
     message = update.message
     if message.photo:
         user_id = update.message.from_user.id
-        user_data_manager = context.bot_data.get("user_data_manager")
 
         current_channel_post = {
             "message_id": message.message_id,
             "photo_id": message.photo[-1].file_id,
             "text": message.caption if message.caption else "",
             "scheduled_time": None,
-            "channel_id": user_data_manager.get_users_channels(user_id)["channel_id"],
+            # "channel_id": user_data_manager.get_users_channels(user_id)["channel_id"],
+            "channel_id": context.bot_data["user_channel"].get("channel_id"),
         }
-        user_data_manager.set_state(user_id, State.WAITING_TIME_FOR_CHANNEL_POST)
+        set_user_state(context, State.WAITING_TIME_FOR_CHANNEL_POST)
+        # user_data_manager.set_state(user_id, State.WAITING_TIME_FOR_CHANNEL_POST)
         await update.message.reply_text(
             "Теперь отправьте дату и время публикации (формат: YYYY-MM-DD HH:MM)."
         )
@@ -120,16 +121,13 @@ async def set_time(update, context: CallbackContext) -> None:
             )
 
         append_post_by_user_id(user_id, os.getenv("CHANNEL_POSTS_FILE"))
-
-        user_data_manager = context.bot_data.get("user_data_manager")
-        user_data_manager.set_state(user_id, State.WAITING_CHAT_POSTS)
-        user_data_manager.set_current_channel_post(user_id, current_channel_post)
+        set_user_state(context, State.WAITING_CHAT_POSTS)
+        context.bot_data["file_id"] = current_channel_post.get("photo_id")
+        # user_data_manager.set_state(user_id, State.WAITING_CHAT_POSTS)
+        # user_data_manager.set_current_channel_post(user_id, current_channel_post)
 
         await update.message.reply_text(
-            f"Пост будет опубликован {post_time.strftime('%Y-%m-%d %H:%M')}."
-        )
-        await update.message.reply_text(
-            "Теперь пришлите файлы которые будут отправлены в комментарий"
+            f"Пост будет опубликован {post_time.strftime('%Y-%m-%d %H:%M')}. \nТеперь пришлите файлы которые будут отправлены как комментарии. Как загрузка закончится введите команду /end"
         )
     except ValueError:
         await update.message.reply_text(

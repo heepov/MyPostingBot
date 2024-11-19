@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 
 import logging
-from states import State
+from states import State, set_user_state
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ def check_link(link):
 async def add_channel_link(update: Update, context: CallbackContext) -> None:
     global users_channels
     user_id = update.message.from_user.id
-    user_data_manager = context.bot_data.get("user_data_manager")
+    # user_data_manager = context.bot_data.get("user_data_manager")
 
     channel_link = check_link(update.message.text.strip())
     # Извлекаем имя канала из полного URL, если оно было передано
@@ -56,9 +56,10 @@ async def add_channel_link(update: Update, context: CallbackContext) -> None:
             "chat_username": None,
             "chat_id": None,
         }
-        user_data_manager.set_state(user_id, State.WAITING_ADD_CHAT)
+        # user_data_manager.set_state(user_id, State.WAITING_ADD_CHAT)
+        set_user_state(context, State.WAITING_ADD_CHAT)
         await update.message.reply_text(
-            f"Канал @{channel.username} добавлен успешно.\n\nТеперь пожалуйста отправьте ссылку на ваш КАНАЛ."
+            f"Канал @{channel.username} добавлен успешно.\n\nТеперь пожалуйста отправьте ссылку на ваш ЧАТ."
         )
 
     except Exception as e:
@@ -71,7 +72,7 @@ async def add_channel_link(update: Update, context: CallbackContext) -> None:
 async def add_chat_link(update: Update, context: CallbackContext) -> None:
     global users_channels
     user_id = update.message.from_user.id
-    user_data_manager = context.bot_data.get("user_data_manager")
+    # user_data_manager = context.bot_data.get("user_data_manager")
 
     channel_link = check_link(update.message.text.strip())
 
@@ -93,10 +94,19 @@ async def add_chat_link(update: Update, context: CallbackContext) -> None:
         users_channels["chat_username"] = chat.username
         users_channels["chat_id"] = chat.id
 
-        user_data_manager.set_users_channels(user_id, users_channels)
+        # user_data_manager.set_users_channels(user_id, users_channels)
+        context.bot_data["user_channel"] = {
+            "channel_id": users_channels["channel_id"],
+            "channel_username": users_channels["channel_username"],
+        }
+        context.bot_data["user_chat"] = {
+            "chat_id": users_channels["chat_id"],
+            "chat_username": users_channels["chat_username"],
+        }
         save_file(users_channels, os.getenv("USER_CHANNELS_FILE"))
 
-        user_data_manager.set_state(user_id, State.IDLE)
+        # user_data_manager.set_state(user_id, State.IDLE)
+        set_user_state(context, State.IDLE)
         await update.message.reply_text(
             f"Теперь у вас подключен:\nКанал @{users_channels['channel_username']}\nЧат @{users_channels['chat_username']}"
         )
