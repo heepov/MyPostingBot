@@ -37,10 +37,12 @@ class MsgDict(TypedDict):
 async def adding_channel_post(update: Update, context: CallbackContext) -> None:
 
     if update.message.photo:
+        info = await context.bot.get_chat(user_data_manager.get_channel_id())
+        channel_username = info.username
         post = {
             "channel_post": {
                 "channel_id": user_data_manager.get_channel_id(),
-                "text": update.message.caption if update.message.caption else "",
+                "text": f"{update.message.caption if update.message.caption else ''}\n\nmore in comments\n@{channel_username}",
                 "photo_id": update.message.photo[-1].file_id,
                 "message_id": update.message.message_id,
                 "chat_id": update.message.chat_id,

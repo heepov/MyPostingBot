@@ -29,7 +29,6 @@ from strings import (
     EXTRA_SETUP_ALREADY,
     ERROR_NEED_CANCEL,
     COMMAND_COUNT,
-    SUCCESS_CHANNEL_POST,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,7 +90,6 @@ async def bot_private_massage_handlers(
             await adding_channel_post(update, context)
             return
         elif state == State.ADDING_MEDIA:
-            await update.message.reply_text(SUCCESS_CHANNEL_POST)
             await adding_media(update, context)
             return
         elif state == State.SETTING_TIMER:
@@ -150,13 +148,15 @@ async def checkup(update: Update, context: CallbackContext) -> None:
     if not check_access(update.message.from_user.id):
         await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
-
-    check = await check_all_permission(update, context)
-    if check == True:
-        await update.message.reply_text(SUCCESS_PERMISSION)
+    if check_data():
+        check = await check_all_permission(update, context)
+        if check == True:
+            await update.message.reply_text(SUCCESS_PERMISSION)
+        else:
+            await update.message.reply_text(check)
+            user_data_manager.set_state(State.ERROR_PERMISSION)
     else:
-        await update.message.reply_text(check)
-        user_data_manager.set_state(State.ERROR_PERMISSION)
+        await update.message.reply_text(ERROR_EMPTY_DATA)
 
 
 # Command /setup
@@ -166,9 +166,8 @@ async def setup(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
-    user_data_manager.set_state(State.ADDING_CHANNEL)
-
     if check_data():
+        user_data_manager.set_state(State.ADDING_CHANNEL)
         channel_username = user_data_manager.get_channel_id()
         chat_username = user_data_manager.get_chat_id()
 
@@ -184,6 +183,7 @@ async def setup(update: Update, context: CallbackContext) -> None:
             f"{CHANNELS_INFO_STRING(channel_username, chat_username)}\n{EXTRA_SETUP_ALREADY}"
         )
     else:
+        user_data_manager.set_state(State.ADDING_CHANNEL)
         await update.message.reply_text(COMMAND_SETUP)
 
 
@@ -199,6 +199,8 @@ async def add(update: Update, context: CallbackContext) -> None:
         if user_data_manager.get_state() != State.ERROR_PERMISSION:
             user_data_manager.set_state(State.CREATING_POST)
             await update.message.reply_text(COMMAND_ADD_POST)
+    else:
+        await update.message.reply_text(ERROR_EMPTY_DATA)
 
 
 # Command /time
