@@ -9,7 +9,7 @@ ERROR_CHANNEL_LINK = "This isn't channel or chat link or username"
 ERROR_CHANNEL_ADD = "Can't get channel or chat info."
 
 COMMAND_START = "All good! To show menu input /help"
-COMMAND_HELP = f"Menu:\n/add - to add new post\n/setup - to connect channels\n/checkup - to check connection and permission\n/help - to show menu\n/cancel - to reset all action"
+COMMAND_HELP = f"Menu:\n/add - to add new post\n/setup - to connect channels\n/checkup - to check connection and permission\n/help - to show menu\n/cancel - to reset all action\n/check_post - check scheduled post"
 COMMAND_CANCEL = "All actions canceled"
 COMMAND_END = "Success your post was planing"
 COMMAND_CHECKUP = "Start checking your channels"
@@ -34,5 +34,3 @@ ERROR_PERMISSION_STRING = (
 CHANNEL_SETUP_STRING = (
     lambda type, channel_username: f"You added {type} @{channel_username}."
 )
-
-

@@ -8,12 +8,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 
 from user_data_manager import user_data_manager
-
-# from new_channel_post import adding_channel_post, set_time
-# from new_chat_post import schedule_chat_message, send_chat_posts
-from creating_new_post import adding_channel_post, adding_media, set_time, send_chat_posts
+from creating_new_post import adding_channel_post, adding_media, set_time
+from planning_send_posts import send_chat_posts
 from setup import process_setup
-from utils import check_all_permission
+from utils import check_all_permission, check_scheduled_post, count_scheduled_post
 from states import State
 from strings import (
     SETTING_TIME,
@@ -41,10 +39,13 @@ def register_all_handlers(application):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help))
     application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(CommandHandler("time", time))
     application.add_handler(CommandHandler("checkup", checkup))
     application.add_handler(CommandHandler("setup", setup))
+    application.add_handler(CommandHandler("count", count))
+    application.add_handler(CommandHandler("check_post", check_post))
+
     application.add_handler(CommandHandler("add", add))
+    application.add_handler(CommandHandler("time", time))
 
     # Регистрация обработки сообщений
     application.add_handler(
@@ -67,9 +68,9 @@ def check_data():
         and user_data_manager.get_channel_id()
         and user_data_manager.get_chat_id()
     ):
-        user_data_manager.set_state(State.ERROR_DATA)
         return True
     else:
+        user_data_manager.set_state(State.ERROR_DATA)
         return False
 
 
@@ -91,7 +92,6 @@ async def bot_private_massage_handlers(
         if state == State.CREATING_POST:
             await adding_channel_post(update, context)
             return
-        # TODO тут надо обрабатывать не только медиа групп но и одиночные сообщения
         elif state == State.ADDING_MEDIA:
             await adding_media(update, context)
             return
@@ -101,19 +101,14 @@ async def bot_private_massage_handlers(
 
     if state == State.ERROR_DATA:
         await update.message.reply_text(ERROR_DATA)
-        return
     elif state == State.ERROR_PERMISSION:
         await update.message.reply_text(ERROR_PERMISSIONS)
-        return
     elif state == State.ADDING_CHANNEL:
         await process_setup(update, context, True)
-        return
     elif state == State.ADDING_CHAT:
         await process_setup(update, context, False)
-        return
     else:
         await update.message.reply_text(ERROR_WRONG_MESSAGE)
-        return
 
 
 # Command /start
@@ -142,7 +137,7 @@ async def cancel(update: Update, context: CallbackContext) -> None:
     if not check_access(update.message.from_user.id):
         await update.message.reply_text(ERROR_ACCESS_DENY)
         return
-
+    logger.info(f"HERE {check_data()}")
     if check_data():
         user_data_manager.reset_state()
     else:
@@ -212,12 +207,49 @@ async def time(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(ERROR_ACCESS_DENY)
         return
 
-    if user_data_manager.get_state() != State.ADDING_CHAT_POSTS:
+    if user_data_manager.get_state() != State.ADDING_MEDIA:
         await update.message.reply_text(ERROR_WRONG_MESSAGE)
         return
 
     user_data_manager.set_state(State.SETTING_TIMER)
     await update.message.reply_text(SETTING_TIME(getenv("DATE_FOR_PRINT")))
+
+
+# Command /check_post
+async def check_post(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/check_post")
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    if check_data():
+        if user_data_manager.get_state() == State.IDLE:
+            await check_scheduled_post(update, context)
+            await update.message.reply_text(
+                f"All updated! You have : {count_scheduled_post(context)} posts."
+            )
+        else:
+            await update.message.reply_text(
+                "This command work only after use /cancel command."
+            )
+    else:
+        await update.message.reply_text(ERROR_DATA)
+
+
+# Command /count
+async def count(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/count")
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    if check_data():
+        await update.message.reply_text(
+            f"You have planned {count_scheduled_post(context)}"
+        )
+
+    else:
+        await update.message.reply_text(ERROR_DATA)
 
 
 # Sending post to new channel message's comment

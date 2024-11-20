@@ -3,10 +3,14 @@
 import logging
 from os import getenv
 from telegram import Bot
+from telegram import Update
+from telegram.ext import CallbackContext
+from datetime import datetime
+
 from user_data_manager import user_data_manager
 from strings import ERROR_PERMISSION_STRING
 from file_service import load_file, save_file
-from datetime import datetime
+from planning_send_posts import set_post_in_scheduler
 
 
 def setup_logging(level=logging.INFO):
@@ -64,21 +68,29 @@ async def check_all_permission(update, context):
 
 
 def files_cleaner():
-    channel_posts = load_file(getenv("CHANNEL_POSTS_FILE"))
-    chat_posts = load_file(getenv("CHAT_POSTS_FILE"))
+    posts = load_file(getenv("POSTS_FILE"))
 
-    updated_channel_posts = {
+    updated_posts = {
         key: value
-        for key, value in channel_posts.items()
-        if datetime.strptime(value["scheduled_time"], getenv("DATE_TIME_FORMAT"))
+        for key, value in posts.items()
+        if datetime.strptime(
+            value["channel_post"].get("scheduled_time"), getenv("DATE_TIME_FORMAT")
+        )
         > datetime.now()
     }
 
-    updated_chat_posts = {
-        key: value
-        for key, value in chat_posts.items()
-        if key in [value["photo_id"] for value in updated_channel_posts.values()]
-    }
+    save_file(updated_posts, getenv("POSTS_FILE"))
 
-    save_file(updated_channel_posts, getenv("CHANNEL_POSTS_FILE"))
-    save_file(updated_chat_posts, getenv("CHAT_POSTS_FILE"))
+
+async def check_scheduled_post(update: Update, context: CallbackContext) -> None:
+    files_cleaner()
+    posts = load_file(getenv("POSTS_FILE"))
+    for key, value in posts.items():
+        await set_post_in_scheduler(update, context, value)
+
+
+def count_scheduled_post(context: CallbackContext):
+    scheduler = context.bot_data["scheduler"]
+    jobs = scheduler.get_jobs()
+    scheduled_posts_count = len(jobs)
+    return scheduled_posts_count
