@@ -1,4 +1,8 @@
 .env
 *.json
 
+constants.py
+
 old/
+__pycache__/
+venv/
