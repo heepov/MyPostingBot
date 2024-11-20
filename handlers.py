@@ -4,14 +4,19 @@ import logging
 from os import getenv
 from telegram import Update
 from telegram.ext import CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+
 
 from user_data_manager import user_data_manager
-from new_channel_post import adding_channel_post, set_time
-from new_chat_post import schedule_chat_message, send_chat_posts
+
+# from new_channel_post import adding_channel_post, set_time
+# from new_chat_post import schedule_chat_message, send_chat_posts
+from creating_new_post import adding_channel_post, adding_media, set_time, send_chat_posts
 from setup import process_setup
 from utils import check_all_permission
 from states import State
 from strings import (
+    SETTING_TIME,
     CHANNELS_INFO_STRING,
     ERROR,
     ERROR_ACCESS_DENY,
@@ -21,7 +26,6 @@ from strings import (
     COMMAND_HELP,
     COMMAND_START,
     COMMAND_CANCEL,
-    COMMAND_END,
     COMMAND_CHECKUP,
     COMMAND_SETUP,
     COMMAND_ADD,
@@ -30,6 +34,27 @@ from strings import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def register_all_handlers(application):
+    # Регистрация команд
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help))
+    application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CommandHandler("time", time))
+    application.add_handler(CommandHandler("checkup", checkup))
+    application.add_handler(CommandHandler("setup", setup))
+    application.add_handler(CommandHandler("add", add))
+
+    # Регистрация обработки сообщений
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & ~filters.COMMAND, bot_private_massage_handlers
+        )
+    )
+    application.add_handler(
+        MessageHandler(~filters.COMMAND, bot_reply_messages_from_chat)
+    )
 
 
 def check_access(user_id):
@@ -42,13 +67,17 @@ def check_data():
         and user_data_manager.get_channel_id()
         and user_data_manager.get_chat_id()
     ):
+        user_data_manager.set_state(State.ERROR_DATA)
         return True
     else:
         return False
 
 
 # Private message processing (from bot and not command)
-async def private_messages(update: Update, context: CallbackContext) -> None:
+async def bot_private_massage_handlers(
+    update: Update, context: CallbackContext
+) -> None:
+
     if not check_access(update.message.from_user.id):
         await update.message.reply_text(ERROR_ACCESS_DENY)
         return
@@ -56,20 +85,18 @@ async def private_messages(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     state = user_data_manager.get_state()
 
-    logger.info(
-        f"Обработка сообщения от {user_id}. Состояние: {state}. Check data: {check_data()}"
-    )
+    log_processing_info(update, "message")
 
     if check_data():
-        if state == State.ADDING_CHANNEL_POST:
+        if state == State.CREATING_POST:
             await adding_channel_post(update, context)
             return
-        elif state == State.SETTING_TIMER_FOR_CHANNEL_POST:
-            await set_time(update, context)
-            return
         # TODO тут надо обрабатывать не только медиа групп но и одиночные сообщения
-        elif update.message.media_group_id and state == State.ADDING_CHAT_POSTS:
-            await schedule_chat_message(update, context)
+        elif state == State.ADDING_MEDIA:
+            await adding_media(update, context)
+            return
+        elif state == State.SETTING_TIMER:
+            await set_time(update, context)
             return
 
     if state == State.ERROR_DATA:
@@ -89,26 +116,9 @@ async def private_messages(update: Update, context: CallbackContext) -> None:
         return
 
 
-# Sending post to new channel message's comment
-async def reply_post(update: Update, context: CallbackContext) -> None:
-    try:
-        if (
-            not update.message
-            or user_data_manager.get_state() == State.ERROR_DATA
-            or update.message.reply_to_message
-            or update.message.from_user.first_name != "Telegram"
-        ):
-            return
-    except Exception as e:
-        logger.error(e)
-        return
-    if update.message.photo and len(update.message.photo) > 0:
-        channel_post_photo_id = update.message.photo[-1].file_id
-        await send_chat_posts(update, context, channel_post_photo_id)
-
-
 # Command /start
 async def start(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/start")
     if not check_access(update.message.from_user.id):
         await update.message.reply_text(ERROR_ACCESS_DENY)
         return
@@ -118,6 +128,7 @@ async def start(update: Update, context: CallbackContext) -> None:
 
 # Command /help
 async def help(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/help")
     if not check_access(update.message.from_user.id):
         await update.message.reply_text(ERROR_ACCESS_DENY)
         return
@@ -127,6 +138,7 @@ async def help(update: Update, context: CallbackContext) -> None:
 
 # Command /cancel
 async def cancel(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/cancel")
     if not check_access(update.message.from_user.id):
         await update.message.reply_text(ERROR_ACCESS_DENY)
         return
@@ -138,22 +150,9 @@ async def cancel(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text(COMMAND_CANCEL)
 
 
-# Command /end
-async def end(update: Update, context: CallbackContext) -> None:
-    if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
-        return
-
-    if user_data_manager.get_state() != State.ADDING_CHAT_POSTS:
-        await update.message.reply_text(ERROR_WRONG_MESSAGE)
-        return
-
-    await update.message.reply_text(COMMAND_END)
-    user_data_manager.reset_state()
-
-
 # Command /checkup
 async def checkup(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/checkup")
     await update.message.reply_text(COMMAND_CHECKUP)
     check = await check_all_permission(update, context)
     if check == True:
@@ -165,7 +164,7 @@ async def checkup(update: Update, context: CallbackContext) -> None:
 
 # Command /setup
 async def setup(update: Update, context: CallbackContext) -> None:
-
+    log_processing_info(update, "/setup")
     if not check_access(update.message.from_user.id):
         await update.message.reply_text(ERROR_ACCESS_DENY)
         return
@@ -194,6 +193,7 @@ async def setup(update: Update, context: CallbackContext) -> None:
 
 # Command /add
 async def add(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/add")
     if not check_access(update.message.from_user.id):
         await update.message.reply_text(ERROR_ACCESS_DENY)
         return
@@ -201,5 +201,49 @@ async def add(update: Update, context: CallbackContext) -> None:
     if check_data():
         await checkup(update, context)
         if user_data_manager.get_state() != State.ERROR_PERMISSION:
-            user_data_manager.set_state(State.ADDING_CHANNEL_POST)
+            user_data_manager.set_state(State.CREATING_POST)
             await update.message.reply_text(COMMAND_ADD)
+
+
+# Command /time
+async def time(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/time")
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    if user_data_manager.get_state() != State.ADDING_CHAT_POSTS:
+        await update.message.reply_text(ERROR_WRONG_MESSAGE)
+        return
+
+    user_data_manager.set_state(State.SETTING_TIMER)
+    await update.message.reply_text(SETTING_TIME(getenv("DATE_FOR_PRINT")))
+
+
+# Sending post to new channel message's comment
+async def bot_reply_messages_from_chat(
+    update: Update, context: CallbackContext
+) -> None:
+    logger.info(f"Were getting new message from chat or channel")
+    try:
+        if (
+            not update.message
+            or user_data_manager.get_state() == State.ERROR_DATA
+            or update.message.reply_to_message
+            or update.message.from_user.first_name != "Telegram"
+        ):
+            return
+    except Exception as e:
+        logger.error(e)
+        return
+    if update.message.photo and len(update.message.photo) > 0:
+        logger.info(f"Were getting new message from chat. Start replying messages")
+        await send_chat_posts(update, context)
+
+
+def log_processing_info(update: Update, type):
+    user_id = update.message.from_user.id
+    state = user_data_manager.get_state()
+    logger.info(
+        f"Processing {type} from user_id {user_id}. State: {state}. Check data: {check_data()}"
+    )

@@ -14,8 +14,8 @@ class UserDataManager:
         self.channel_id = None
         self.chat_id = None
 
-        self.photo_id = None
         self.state: State = State.ERROR_DATA
+        self.post = None
         self.load_data()
 
     def load_data(self):
@@ -48,12 +48,6 @@ class UserDataManager:
     def set_chat_id(self, chat_id):
         self.chat_id = chat_id
 
-    def get_photo_id(self):
-        return self.photo_id
-
-    def set_photo_id(self, photo_id):
-        self.photo_id = photo_id
-
     def get_state(self):
         return self.state
 
@@ -62,6 +56,12 @@ class UserDataManager:
 
     def reset_state(self):
         self.state = State.IDLE
+
+    def set_post(self, post):
+        self.post = post
+
+    def get_post(self):
+        return self.post
 
 
 user_data_manager = UserDataManager()

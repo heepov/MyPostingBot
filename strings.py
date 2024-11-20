@@ -34,3 +34,5 @@ ERROR_PERMISSION_STRING = (
 CHANNEL_SETUP_STRING = (
     lambda type, channel_username: f"You added {type} @{channel_username}."
 )
+
+
