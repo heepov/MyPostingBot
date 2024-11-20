@@ -8,17 +8,17 @@ logger = logging.getLogger(__name__)
 
 
 # Load file
-def load_file(file_name):
-    if os.path.exists(file_name):
-        with open(file_name, "r") as f:
+def load_file(file_path):
+    if os.path.exists(file_path):
+        with open(file_path, "r") as f:
             return json.load(f)
     else:
-        with open(file_name, "w") as f:
+        with open(file_path, "w") as f:
             json.dump({}, f)
         return {}
 
 
 # Полностью перезаписывает файл новыми данными.
-def save_file(data, file_name):
-    with open(file_name, "w") as f:
+def save_file(data, file_path):
+    with open(file_path, "w") as f:
         json.dump(data, f, indent=4)

@@ -1,13 +1,12 @@
 # new_chat_post.py
 
-import os
+from os import getenv
 import logging
-from states import State
 import asyncio
 import logging
 from typing import TypedDict, Literal
-from file_service import load_file, save_file
-
+from telegram.ext import ContextTypes
+from telegram.helpers import effective_message_type
 from telegram import (
     Update,
     InputMediaVideo,
@@ -15,26 +14,25 @@ from telegram import (
     InputMediaDocument,
     InputMediaAudio,
 )
-from telegram.ext import ContextTypes
 
-from telegram.helpers import effective_message_type
+from user_data_manager import user_data_manager
+from file_service import load_file, save_file
+from states import State
 
-logger = logging.getLogger(__name__)
-
-scheduled_chat_posts = load_file(os.getenv("CHAT_POSTS_FILE"))
-
-
-# Константы
+FILE_PATH = getenv("CHAT_POSTS_FILE")
+MAX_MEDIA_IN_GROUP = 10
 MEDIA_GROUP_TYPES = {
     "photo": InputMediaPhoto,
     "video": InputMediaVideo,
     "document": InputMediaDocument,
     "audio": InputMediaAudio,
 }
-MAX_MEDIA_IN_GROUP = 10
+
+logger = logging.getLogger(__name__)
+scheduled_chat_posts = load_file(FILE_PATH)
 
 
-def append_post_by_photo_id(photo_id, msg_dict, file_name):
+def add_posts_to_file(photo_id, msg_dict):
     global scheduled_chat_posts
     if photo_id in scheduled_chat_posts:
         if isinstance(
@@ -48,14 +46,14 @@ def append_post_by_photo_id(photo_id, msg_dict, file_name):
     else:
         # Если ключа нет, создаём его с новым списком
         scheduled_chat_posts[photo_id] = [msg_dict]
-    save_file(scheduled_chat_posts, file_name)
+    save_file(scheduled_chat_posts, FILE_PATH)
 
 
-def remove_key_from_file(file_name: str, key_to_remove):
+def del_posts_from_file(key_to_remove):
     global scheduled_chat_posts
     if key_to_remove in scheduled_chat_posts:
         del scheduled_chat_posts[key_to_remove]
-    save_file(scheduled_chat_posts, file_name)
+    save_file(scheduled_chat_posts, FILE_PATH)
 
 
 class MsgDict(TypedDict):
@@ -69,8 +67,6 @@ class MsgDict(TypedDict):
 async def media_group_sender(
     context: ContextTypes.DEFAULT_TYPE, chat_id, reply_to_message_id
 ):
-    """Отправляет медиагруппу после ожидания"""
-    logger.info("!!!media_group_sender!!!")
     media = []
     for msg in context.job.data[0]:
         media_type = MEDIA_GROUP_TYPES[msg["media_type"]]
@@ -94,41 +90,16 @@ async def media_group_sender(
             await asyncio.sleep(1)
 
 
-async def media_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.effective_message
-    media_type = effective_message_type(message)
-
-    user_id = update.message.from_user.id
-    # user_data_manager = context.bot_data.get("user_data_manager")
-    # chat_id = user_data_manager.get_users_channels(user_id)["chat_id"]
-    # photo_id = user_data_manager.get_current_channel_post(user_id)["photo_id"]
-    photo_id = context.bot_data["file_id"]
-
-    media_id = (
-        message.photo[-1].file_id
-        if message.photo
-        else message.effective_attachment.file_id
-    )
-    msg_dict = MsgDict(
-        media_type=media_type,
-        media_id=media_id,
-        caption=message.caption_html or "",
-        message_id=message.message_id,
-        media_group_id=message.media_group_id,
-    )
-    append_post_by_photo_id(photo_id, msg_dict, os.getenv("CHAT_POSTS_FILE"))
-
-
-# async def send_chat_posts(update: Update, context: ContextTypes.DEFAULT_TYPE, photo_id):
-async def send_chat_posts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("!!!send_chat_posts!!!")
+async def send_chat_posts(update: Update, context: ContextTypes.DEFAULT_TYPE, file_id):
     reply_to_message_id = update.message.message_id
-    # chat_id = load_file(os.getenv("USER_CHANNELS_FILE"))["chat_id"]
-    chat_id = context.bot_data["user_chat"].get("chat_id")
+    chat_id = user_data_manager.get_chat_id()
+    photo_id = user_data_manager.get_photo_id()
 
-    # msg_dict = load_file(os.getenv("CHAT_POSTS_FILE"))[photo_id]
-    msg_dict = scheduled_chat_posts[context.bot_data["file_id"]]
-    remove_key_from_file(os.getenv("CHAT_POSTS_FILE"), context.bot_data["file_id"])
+    if not photo_id in scheduled_chat_posts:
+        return
+
+    msg_dict = scheduled_chat_posts[photo_id]
+    del_posts_from_file(photo_id)
     media_group_id = msg_dict[0]["media_group_id"]
 
     jobs = context.job_queue.get_jobs_by_name(media_group_id)
@@ -144,3 +115,26 @@ async def send_chat_posts(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data=[msg_dict],
             name=media_group_id,
         )
+
+
+async def schedule_chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
+    media_type = effective_message_type(message)
+
+    photo_id = user_data_manager.get_photo_id()
+
+    media_id = (
+        message.photo[-1].file_id
+        if message.photo
+        else message.effective_attachment.file_id
+    )
+
+    msg_dict = MsgDict(
+        media_type=media_type,
+        media_id=media_id,
+        caption=message.caption_html or "",
+        message_id=message.message_id,
+        media_group_id=message.media_group_id,
+    )
+
+    add_posts_to_file(photo_id, msg_dict)

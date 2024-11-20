@@ -1,62 +1,67 @@
 # user_data_manager.py
 
-import os
+from os import getenv
+import logging
 from states import State
-from file_service import load_file
+from file_service import load_file, save_file
+
+logger = logging.getLogger(__name__)
+FILE_PATH = getenv("USER_DATA_FILE")
 
 
 class UserDataManager:
     def __init__(self):
-        self.user_data = {}
+        self.channel_id = None
+        self.chat_id = None
 
-    def get_user_data(self, user_id):
-        if user_id not in self.user_data:
-            self.user_data[user_id] = {
-                "state": State.IDLE,
-                "current_channel_post": {},
-                "users_channels": load_file(os.getenv("USER_CHANNELS_FILE")),
-            }
-        return self.user_data[user_id]
+        self.photo_id = None
+        self.state: State = State.ERROR_DATA
+        self.load_data()
 
-    def set_current_channel_post(self, user_id: int, current_channel_post) -> None:
-        user_data = self.get_user_data(user_id)
-        user_data["current_channel_post"] = current_channel_post
-
-    def get_current_channel_post(self, user_id: int):
-        user_data = self.get_user_data(user_id)
-        if not user_data["current_channel_post"]:
-            return None
+    def load_data(self):
+        required_keys = {"channel_id", "chat_id"}
+        user_data = load_file(FILE_PATH)
+        if not all(key in user_data and user_data[key] for key in required_keys):
+            logger.warning("Not all user data has")
+            return
         else:
-            return user_data["current_channel_post"]
+            self.channel_id = user_data["channel_id"]
+            self.chat_id = user_data["chat_id"]
+            self.state = State.IDLE
 
-    def set_users_channels(self, user_id: int, users_channels) -> None:
-        user_data = self.get_user_data(user_id)
-        user_data["users_channels"] = [users_channels]
+    def save_data(self):
+        data = {
+            "channel_id": self.channel_id,
+            "chat_id": self.chat_id,
+        }
+        save_file(data, FILE_PATH)
 
-    def get_users_channels(self, user_id: int):
-        user_data = self.get_user_data(user_id)
-        if not user_data["users_channels"]:
-            return None
-        else:
-            return user_data["users_channels"]
+    def get_channel_id(self):
+        return self.channel_id
 
-    def set_state(self, user_id: int, state: str) -> None:
-        """Устанавливает состояние пользователя."""
-        user_data = self.get_user_data(user_id)
-        user_data["state"] = state
+    def set_channel_id(self, channel_id):
+        self.channel_id = channel_id
 
-    def get_state(self, user_id: int) -> str:
-        """Возвращает текущее состояние пользователя. Если состояние не установлено, возвращает 'idle'."""
-        user_data = self.get_user_data(user_id)
-        return user_data.get("state", State.IDLE)
+    def get_chat_id(self):
+        return self.chat_id
 
-    def reset_state(self, user_id: int) -> None:
-        """Сбрасывает состояние пользователя в 'idle'."""
-        user_data = self.get_user_data(user_id)
-        user_data["state"] = State.IDLE
+    def set_chat_id(self, chat_id):
+        self.chat_id = chat_id
 
-    def delete_state(self, user_id: int) -> None:
-        """Удаляет состояние пользователя (например, если нужно освободить память)."""
-        user_data = self.get_user_data(user_id)
-        if "state" in user_data:
-            del user_data["state"]
+    def get_photo_id(self):
+        return self.photo_id
+
+    def set_photo_id(self, photo_id):
+        self.photo_id = photo_id
+
+    def get_state(self):
+        return self.state
+
+    def set_state(self, state):
+        self.state = state
+
+    def reset_state(self):
+        self.state = State.IDLE
+
+
+user_data_manager = UserDataManager()

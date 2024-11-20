@@ -1,76 +1,205 @@
 # handlers.py
 
+import logging
+from os import getenv
 from telegram import Update
 from telegram.ext import CallbackContext
-import logging
 
-from states import State, set_user_state, reset_user_state
-from user_setup import check_user_data
+from user_data_manager import user_data_manager
+from new_channel_post import adding_channel_post, set_time
+from new_chat_post import schedule_chat_message, send_chat_posts
+from setup import process_setup
+from utils import check_all_permission
+from states import State
+from strings import (
+    CHANNELS_INFO_STRING,
+    ERROR,
+    ERROR_ACCESS_DENY,
+    ERROR_DATA,
+    ERROR_WRONG_MESSAGE,
+    ERROR_PERMISSIONS,
+    COMMAND_HELP,
+    COMMAND_START,
+    COMMAND_CANCEL,
+    COMMAND_END,
+    COMMAND_CHECKUP,
+    COMMAND_SETUP,
+    COMMAND_ADD,
+    PERMISSION_SUCCESS,
+    SETUP_ALREADY,
+)
 
 logger = logging.getLogger(__name__)
 
 
-async def start(update: Update, context: CallbackContext) -> None:
-    if await check_user_data(update, context):
-        await update.message.reply_text(
-            "Привет! Отправь команду /menu для просмотра всех команд."
-        )
-        reset_user_state(context)
-    else:
-        await setup(update, context)
+def check_access(user_id):
+    return user_id == int(getenv("ADMIN_ID"))
 
 
-async def add(update: Update, context: CallbackContext) -> None:
-    set_user_state(context, State.WAITING_CHANNEL_POST)
-    await update.message.reply_text(
-        "Пожалуйста, отправьте текст вашего поста и прикрепите картинку."
-    )
-
-
-async def setup(update: Update, context: CallbackContext) -> None:
-    set_user_state(context, State.WAITING_ADD_CHANNEL)
-    if not all(
-        [
-            context.bot_data["user_channel"].get("channel_id"),
-            context.bot_data["user_channel"].get("channel_username"),
-            context.bot_data["user_chat"].get("chat_id"),
-            context.bot_data["user_chat"].get("chat_username"),
-        ]
+def check_data():
+    if (
+        user_data_manager.get_state() != State.ERROR_DATA
+        and user_data_manager.get_channel_id()
+        and user_data_manager.get_chat_id()
     ):
-        await update.message.reply_text("Пожалуйста, ссылку на ваш КАНАЛ.")
+        return True
     else:
-        await update.message.reply_text(
-            f"""
-Сейчас у вас подключены:
-Канал..@{context.bot_data["user_channel"].get("channel_username")}
-Чат....@{context.bot_data["user_chat"].get("chat_username")}\n
-Если хотите их поменять отправьте ссылку на ваш КАНАЛ иначе используйте команду /cancel"""
-        )
+        return False
 
 
-async def cancel(update: Update, context: CallbackContext) -> None:
-    reset_user_state(context)
-    await update.message.reply_text("Все операции прерваны!")
+# Private message processing (from bot and not command)
+async def private_messages(update: Update, context: CallbackContext) -> None:
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
 
+    user_id = update.message.from_user.id
+    state = user_data_manager.get_state()
 
-async def end(update: Update, context: CallbackContext) -> None:
-    reset_user_state(context)
-    await update.message.reply_text("Ваш пост успешно запланирован!")
-
-
-async def checkup(update: Update, context: CallbackContext) -> None:
-    await update.message.reply_text(f"Проверка каналов пользователя...")
-    await check_user_data(update, context)
-
-
-async def menu(update: Update, context: CallbackContext) -> None:
-    await update.message.reply_text(
-        f"""
-Меню:
-/add - добавить новый пост
-/setup - подключить каналы
-/checkup - проверить подключенные каналы
-/menu - посмотреть все доступные команды
-/cancel - сброс любой операции
-        """
+    logger.info(
+        f"Обработка сообщения от {user_id}. Состояние: {state}. Check data: {check_data()}"
     )
+
+    if check_data():
+        if state == State.ADDING_CHANNEL_POST:
+            await adding_channel_post(update, context)
+            return
+        elif state == State.SETTING_TIMER_FOR_CHANNEL_POST:
+            await set_time(update, context)
+            return
+        # TODO тут надо обрабатывать не только медиа групп но и одиночные сообщения
+        elif update.message.media_group_id and state == State.ADDING_CHAT_POSTS:
+            await schedule_chat_message(update, context)
+            return
+
+    if state == State.ERROR_DATA:
+        await update.message.reply_text(ERROR_DATA)
+        return
+    elif state == State.ERROR_PERMISSION:
+        await update.message.reply_text(ERROR_PERMISSIONS)
+        return
+    elif state == State.ADDING_CHANNEL:
+        await process_setup(update, context, True)
+        return
+    elif state == State.ADDING_CHAT:
+        await process_setup(update, context, False)
+        return
+    else:
+        await update.message.reply_text(ERROR_WRONG_MESSAGE)
+        return
+
+
+# Sending post to new channel message's comment
+async def reply_post(update: Update, context: CallbackContext) -> None:
+    try:
+        if (
+            not update.message
+            or user_data_manager.get_state() == State.ERROR_DATA
+            or update.message.reply_to_message
+            or update.message.from_user.first_name != "Telegram"
+        ):
+            return
+    except Exception as e:
+        logger.error(e)
+        return
+    if update.message.photo and len(update.message.photo) > 0:
+        channel_post_photo_id = update.message.photo[-1].file_id
+        await send_chat_posts(update, context, channel_post_photo_id)
+
+
+# Command /start
+async def start(update: Update, context: CallbackContext) -> None:
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    await update.message.reply_text(COMMAND_START)
+
+
+# Command /help
+async def help(update: Update, context: CallbackContext) -> None:
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    await update.message.reply_text(COMMAND_HELP)
+
+
+# Command /cancel
+async def cancel(update: Update, context: CallbackContext) -> None:
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    if check_data():
+        user_data_manager.reset_state()
+    else:
+        user_data_manager.set_state(State.ERROR_DATA)
+    await update.message.reply_text(COMMAND_CANCEL)
+
+
+# Command /end
+async def end(update: Update, context: CallbackContext) -> None:
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    if user_data_manager.get_state() != State.ADDING_CHAT_POSTS:
+        await update.message.reply_text(ERROR_WRONG_MESSAGE)
+        return
+
+    await update.message.reply_text(COMMAND_END)
+    user_data_manager.reset_state()
+
+
+# Command /checkup
+async def checkup(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text(COMMAND_CHECKUP)
+    check = await check_all_permission(update, context)
+    if check == True:
+        await update.message.reply_text(PERMISSION_SUCCESS)
+    else:
+        await update.message.reply_text(check)
+        user_data_manager.set_state(State.ERROR_PERMISSION)
+
+
+# Command /setup
+async def setup(update: Update, context: CallbackContext) -> None:
+
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    user_data_manager.set_state(State.ADDING_CHANNEL)
+
+    if check_data():
+        channel_username = user_data_manager.get_channel_id()
+        chat_username = user_data_manager.get_chat_id()
+
+        try:
+            info = await context.bot.get_chat(channel_username)
+            channel_username = info.username
+            info = await context.bot.get_chat(chat_username)
+            chat_username = info.username
+        except Exception as e:
+            logger.error({e})
+
+        await update.message.reply_text(
+            f"{CHANNELS_INFO_STRING(channel_username, chat_username)}\n{SETUP_ALREADY}"
+        )
+    else:
+        chat_id = update.effective_chat.id
+        await context.bot.send_message(chat_id=chat_id, text=COMMAND_SETUP)
+
+
+# Command /add
+async def add(update: Update, context: CallbackContext) -> None:
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENY)
+        return
+
+    if check_data():
+        await checkup(update, context)
+        if user_data_manager.get_state() != State.ERROR_PERMISSION:
+            user_data_manager.set_state(State.ADDING_CHANNEL_POST)
+            await update.message.reply_text(COMMAND_ADD)
