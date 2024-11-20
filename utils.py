@@ -1,7 +1,6 @@
 # utils.py
 
 import logging
-from os import getenv
 from telegram import Bot
 from telegram import Update
 from telegram.ext import CallbackContext
@@ -11,6 +10,7 @@ from user_data_manager import user_data_manager
 from strings import ERROR_PERMISSION_STRING
 from file_service import load_file, save_file
 from planning_send_posts import set_post_in_scheduler
+from constants import DATE_TIME_FORMAT, FILE_PATH_POSTS
 
 
 def setup_logging(level=logging.INFO):
@@ -21,7 +21,6 @@ def setup_logging(level=logging.INFO):
 
 
 logger = logging.getLogger(__name__)
-date_time_format = getenv("DATE_TIME_FORMAT")
 
 
 async def check_bot_permission(bot: Bot, chat_id: int):
@@ -68,23 +67,23 @@ async def check_all_permission(update, context):
 
 
 def files_cleaner():
-    posts = load_file(getenv("POSTS_FILE"))
+    posts = load_file(FILE_PATH_POSTS)
 
     updated_posts = {
         key: value
         for key, value in posts.items()
         if datetime.strptime(
-            value["channel_post"].get("scheduled_time"), getenv("DATE_TIME_FORMAT")
+            value["channel_post"].get("scheduled_time"), DATE_TIME_FORMAT
         )
         > datetime.now()
     }
 
-    save_file(updated_posts, getenv("POSTS_FILE"))
+    save_file(updated_posts, FILE_PATH_POSTS)
 
 
 async def check_scheduled_post(update: Update, context: CallbackContext) -> None:
     files_cleaner()
-    posts = load_file(getenv("POSTS_FILE"))
+    posts = load_file(FILE_PATH_POSTS)
     for key, value in posts.items():
         await set_post_in_scheduler(update, context, value)
 

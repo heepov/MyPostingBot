@@ -1,11 +1,9 @@
 # handlers.py
 
 import logging
-from os import getenv
 from telegram import Update
 from telegram.ext import CallbackContext
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
-
+from telegram.ext import CommandHandler, MessageHandler, filters
 
 from user_data_manager import user_data_manager
 from creating_new_post import adding_channel_post, adding_media, set_time
@@ -13,29 +11,31 @@ from planning_send_posts import send_chat_posts
 from setup import process_setup
 from utils import check_all_permission, check_scheduled_post, count_scheduled_post
 from states import State
+from constants import ADMIN_ID
 from strings import (
-    SETTING_TIME,
+    COMMAND_TIME,
     CHANNELS_INFO_STRING,
-    ERROR,
-    ERROR_ACCESS_DENY,
-    ERROR_DATA,
-    ERROR_WRONG_MESSAGE,
+    ERROR_ACCESS_DENIED,
+    ERROR_EMPTY_DATA,
+    ERROR_INVALID_COMMAND,
     ERROR_PERMISSIONS,
     COMMAND_HELP,
     COMMAND_START,
     COMMAND_CANCEL,
-    COMMAND_CHECKUP,
+    SUCCESS_POSTS_CHECKED,
     COMMAND_SETUP,
-    COMMAND_ADD,
-    PERMISSION_SUCCESS,
-    SETUP_ALREADY,
+    COMMAND_ADD_POST,
+    SUCCESS_PERMISSION,
+    EXTRA_SETUP_ALREADY,
+    ERROR_NEED_CANCEL,
+    COMMAND_COUNT,
+    SUCCESS_CHANNEL_POST,
 )
 
 logger = logging.getLogger(__name__)
 
 
 def register_all_handlers(application):
-    # Регистрация команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help))
     application.add_handler(CommandHandler("cancel", cancel))
@@ -43,11 +43,9 @@ def register_all_handlers(application):
     application.add_handler(CommandHandler("setup", setup))
     application.add_handler(CommandHandler("count", count))
     application.add_handler(CommandHandler("check_post", check_post))
-
     application.add_handler(CommandHandler("add", add))
     application.add_handler(CommandHandler("time", time))
 
-    # Регистрация обработки сообщений
     application.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE & ~filters.COMMAND, bot_private_massage_handlers
@@ -59,7 +57,7 @@ def register_all_handlers(application):
 
 
 def check_access(user_id):
-    return user_id == int(getenv("ADMIN_ID"))
+    return user_id == ADMIN_ID
 
 
 def check_data():
@@ -80,7 +78,7 @@ async def bot_private_massage_handlers(
 ) -> None:
 
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
     user_id = update.message.from_user.id
@@ -93,6 +91,7 @@ async def bot_private_massage_handlers(
             await adding_channel_post(update, context)
             return
         elif state == State.ADDING_MEDIA:
+            await update.message.reply_text(SUCCESS_CHANNEL_POST)
             await adding_media(update, context)
             return
         elif state == State.SETTING_TIMER:
@@ -100,7 +99,7 @@ async def bot_private_massage_handlers(
             return
 
     if state == State.ERROR_DATA:
-        await update.message.reply_text(ERROR_DATA)
+        await update.message.reply_text(ERROR_EMPTY_DATA)
     elif state == State.ERROR_PERMISSION:
         await update.message.reply_text(ERROR_PERMISSIONS)
     elif state == State.ADDING_CHANNEL:
@@ -108,14 +107,14 @@ async def bot_private_massage_handlers(
     elif state == State.ADDING_CHAT:
         await process_setup(update, context, False)
     else:
-        await update.message.reply_text(ERROR_WRONG_MESSAGE)
+        await update.message.reply_text(ERROR_INVALID_COMMAND)
 
 
 # Command /start
 async def start(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/start")
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
     await update.message.reply_text(COMMAND_START)
@@ -125,7 +124,7 @@ async def start(update: Update, context: CallbackContext) -> None:
 async def help(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/help")
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
     await update.message.reply_text(COMMAND_HELP)
@@ -135,23 +134,26 @@ async def help(update: Update, context: CallbackContext) -> None:
 async def cancel(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/cancel")
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
-    logger.info(f"HERE {check_data()}")
     if check_data():
         user_data_manager.reset_state()
+        await update.message.reply_text(COMMAND_CANCEL)
     else:
         user_data_manager.set_state(State.ERROR_DATA)
-    await update.message.reply_text(COMMAND_CANCEL)
+        await update.message.reply_text(ERROR_EMPTY_DATA)
 
 
 # Command /checkup
 async def checkup(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/checkup")
-    await update.message.reply_text(COMMAND_CHECKUP)
+    if not check_access(update.message.from_user.id):
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
+        return
+
     check = await check_all_permission(update, context)
     if check == True:
-        await update.message.reply_text(PERMISSION_SUCCESS)
+        await update.message.reply_text(SUCCESS_PERMISSION)
     else:
         await update.message.reply_text(check)
         user_data_manager.set_state(State.ERROR_PERMISSION)
@@ -161,7 +163,7 @@ async def checkup(update: Update, context: CallbackContext) -> None:
 async def setup(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/setup")
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
     user_data_manager.set_state(State.ADDING_CHANNEL)
@@ -179,77 +181,71 @@ async def setup(update: Update, context: CallbackContext) -> None:
             logger.error({e})
 
         await update.message.reply_text(
-            f"{CHANNELS_INFO_STRING(channel_username, chat_username)}\n{SETUP_ALREADY}"
+            f"{CHANNELS_INFO_STRING(channel_username, chat_username)}\n{EXTRA_SETUP_ALREADY}"
         )
     else:
-        chat_id = update.effective_chat.id
-        await context.bot.send_message(chat_id=chat_id, text=COMMAND_SETUP)
+        await update.message.reply_text(COMMAND_SETUP)
 
 
 # Command /add
 async def add(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/add")
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
     if check_data():
         await checkup(update, context)
         if user_data_manager.get_state() != State.ERROR_PERMISSION:
             user_data_manager.set_state(State.CREATING_POST)
-            await update.message.reply_text(COMMAND_ADD)
+            await update.message.reply_text(COMMAND_ADD_POST)
 
 
 # Command /time
 async def time(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/time")
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
     if user_data_manager.get_state() != State.ADDING_MEDIA:
-        await update.message.reply_text(ERROR_WRONG_MESSAGE)
+        await update.message.reply_text(ERROR_INVALID_COMMAND)
         return
 
     user_data_manager.set_state(State.SETTING_TIMER)
-    await update.message.reply_text(SETTING_TIME(getenv("DATE_FOR_PRINT")))
+    await update.message.reply_text(COMMAND_TIME)
 
 
 # Command /check_post
 async def check_post(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/check_post")
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
     if check_data():
         if user_data_manager.get_state() == State.IDLE:
             await check_scheduled_post(update, context)
             await update.message.reply_text(
-                f"All updated! You have : {count_scheduled_post(context)} posts."
+                SUCCESS_POSTS_CHECKED(count_scheduled_post(context))
             )
         else:
-            await update.message.reply_text(
-                "This command work only after use /cancel command."
-            )
+            await update.message.reply_text(ERROR_NEED_CANCEL)
     else:
-        await update.message.reply_text(ERROR_DATA)
+        await update.message.reply_text(ERROR_EMPTY_DATA)
 
 
 # Command /count
 async def count(update: Update, context: CallbackContext) -> None:
     log_processing_info(update, "/count")
     if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENY)
+        await update.message.reply_text(ERROR_ACCESS_DENIED)
         return
 
     if check_data():
-        await update.message.reply_text(
-            f"You have planned {count_scheduled_post(context)}"
-        )
-
+        await update.message.reply_text(COMMAND_COUNT(count_scheduled_post(context)))
     else:
-        await update.message.reply_text(ERROR_DATA)
+        await update.message.reply_text(ERROR_EMPTY_DATA)
 
 
 # Sending post to new channel message's comment
@@ -269,7 +265,6 @@ async def bot_reply_messages_from_chat(
         logger.error(e)
         return
     if update.message.photo and len(update.message.photo) > 0:
-        logger.info(f"Were getting new message from chat. Start replying messages")
         await send_chat_posts(update, context)
 
 

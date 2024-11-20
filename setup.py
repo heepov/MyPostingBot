@@ -9,9 +9,10 @@ from user_data_manager import user_data_manager
 from states import State
 from strings import (
     ERROR_PERMISSION_STRING,
-    CHANNEL_SETUP_STRING,
+    CHAT_SETUP_STRING,
     ERROR_CHANNEL_LINK,
-    ERROR_CHANNEL_ADD,
+    ERROR_GET_CHANNEL_INFO,
+    CHANNEL_SETUP_STRING,
 )
 
 
@@ -36,7 +37,7 @@ async def process_setup(
         # Получение информации о чате
         channel_info = await context.bot.get_chat(link)
     except Exception as e:
-        await update.message.reply_text(f"{ERROR_CHANNEL_ADD} {e}")
+        await update.message.reply_text(f"{ERROR_GET_CHANNEL_INFO} {e}")
         return
 
     try:
@@ -55,12 +56,12 @@ async def process_setup(
     if is_channel:
         user_data_manager.set_channel_id(channel_info.id)
         await update.message.reply_text(
-            f"{CHANNEL_SETUP_STRING(channel_type, channel_info.username)} Now please send CHAT link or username:"
+            f"{CHAT_SETUP_STRING(channel_type, channel_info.username)}\n{CHANNEL_SETUP_STRING}"
         )
     else:
         user_data_manager.set_chat_id(channel_info.id)
         await update.message.reply_text(
-            CHANNEL_SETUP_STRING(channel_type, channel_info.username)
+            CHAT_SETUP_STRING(channel_type, channel_info.username)
         )
 
     user_data_manager.set_state(State.IDLE if not is_channel else State.ADDING_CHAT)

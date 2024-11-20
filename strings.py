@@ -1,36 +1,60 @@
 # strings.py
 
-ERROR = lambda error_message: f"Shit happened. {error_message}"
-ERROR_ACCESS_DENY = "Your access deny!"
-ERROR_DATA = "You don't have any connected channels. Please connect your channel use this command /setup"
-ERROR_PERMISSIONS = "Bot doesn't have require permissions"
-ERROR_WRONG_MESSAGE = "Wrong command or message. Use command /help or /cancel"
-ERROR_CHANNEL_LINK = "This isn't channel or chat link or username"
-ERROR_CHANNEL_ADD = "Can't get channel or chat info."
+from constants import DATE_TIME_FORMAT_PRINT
 
-COMMAND_START = "All good! To show menu input /help"
-COMMAND_HELP = f"Menu:\n/add - to add new post\n/setup - to connect channels\n/checkup - to check connection and permission\n/help - to show menu\n/cancel - to reset all action\n/check_post - check scheduled post"
-COMMAND_CANCEL = "All actions canceled"
-COMMAND_END = "Success your post was planing"
-COMMAND_CHECKUP = "Start checking your channels"
-COMMAND_SETUP = "To add channel and chat, send me CHANNEL link or username"
-SETUP_ALREADY = (
-    "If you want to change channel send me CHANNEL LINK. If not send /cancel command."
+
+# ERROR = lambda error_message: f"An error occurred: {error_message}"
+ERROR_ACCESS_DENIED = "Access denied!"
+ERROR_EMPTY_DATA = (
+    "No channels connected. Please connect channels using the /setup command."
 )
-COMMAND_ADD = "Send post (picture and text):"
-SETTING_TIME = lambda format: (f"Now send date and time (format: {format}).")
-DATE_TIME_MISTAKE_FORMAT = lambda format: f"Date and time error. Check format {format}"
-DATE_TIME_MISTAKE_PAST = "Date and time must be later than the current moment."
-SUCCESS_CHANNEL_POST = (
-    lambda post_time: f"Post will send {post_time}. \nNow send file witch will be send in comment. When uploading finish send command /end"
+ERROR_PERMISSIONS = "The bot lacks the required permissions."
+ERROR_INVALID_COMMAND = (
+    "Invalid command or message. Use /help or /cancel for assistance."
 )
-PERMISSION_SUCCESS = "Success bot has all required permission"
-CHANNELS_INFO_STRING = (
-    lambda channel_username, chat_username: f"Now you have connected:\nChannel: @{channel_username}\nChat: @{chat_username}"
+ERROR_CHANNEL_LINK = "This is not a valid channel or chat link/username."
+ERROR_GET_CHANNEL_INFO = "Unable to retrieve channel or chat information."
+
+
+COMMAND_START = "Welcome! Use /help to see the available commands."
+COMMAND_HELP = (
+    "Menu:\n"
+    "/add - Add a new post\n"
+    "/setup - Connect a channel\n"
+    "/checkup - Check connection and permissions\n"
+    "/help - Show this menu\n"
+    "/cancel - Reset all actions\n"
+    "/check_post - View scheduled posts\n"
+    "/count - See how many posts are planned"
 )
-ERROR_PERMISSION_STRING = (
-    lambda type, error_message: f"Bot doesn't have required permissions in your {type}. {error_message}"
+COMMAND_CANCEL = "All actions have been canceled."
+COMMAND_SETUP = "To connect a channel, send me CHANNEL link or username."
+COMMAND_ADD_POST = "Send the post (image and text):"
+COMMAND_COUNT = lambda count: f"You have planned {count}"
+
+ADD_POST_MEDIA_FILES = "Now send media files for comments."
+
+EXTRA_SETUP_ALREADY = "If you want to change the channel, send me the CHANNEL LINK. Otherwise, use /cancel."
+COMMAND_TIME = f"Now send the date and time in this format: {DATE_TIME_FORMAT_PRINT}."
+ERROR_DATE_TIME_FORMAT = (
+    f"Invalid date and time format. Please use this format: {DATE_TIME_FORMAT_PRINT}."
 )
-CHANNEL_SETUP_STRING = (
-    lambda type, channel_username: f"You added {type} @{channel_username}."
+ERROR_ADD_POST_NEED_PHOTO = "Пожалуйста, отправьте изображение для поста."
+ERROR_DATE_TIME_PAST = "The date and time must be in the future."
+ERROR_NEED_CANCEL = "This command work only after use /cancel command."
+SUCCESS_CHANNEL_POST = "Now upload the file that will be included as a comment. Once uploaded, send the /time command."
+SUCCESS_PERMISSION = "The bot has all the required permissions."
+SUCCESS_POST_SCHEDULED = "Success! Your post has been scheduled."
+SUCCESS_POSTS_CHECKED = lambda count_posts: f"Success! You have : {count_posts} posts."
+CHANNELS_INFO_STRING = lambda channel_username, chat_username: (
+    f"Connected channels:\n"
+    f"Channel: @{channel_username}\n"
+    f"Chat: @{chat_username}\n"
 )
+ERROR_PERMISSION_STRING = lambda type, error_message: (
+    f"The bot lacks the required permissions in your {type}. {error_message}"
+)
+CHAT_SETUP_STRING = (
+    lambda type, channel_username: f"You have added the {type}: @{channel_username}."
+)
+CHANNEL_SETUP_STRING = "Now please send CHAT link or username:"

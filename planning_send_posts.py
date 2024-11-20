@@ -2,12 +2,9 @@
 
 import asyncio
 import logging
-from os import getenv
 from apscheduler.triggers.date import DateTrigger
 from datetime import datetime
 from telegram.ext import ContextTypes
-from file_service import load_file, save_file
-from user_data_manager import user_data_manager
 from telegram.ext import CallbackContext
 from telegram import (
     Update,
@@ -17,12 +14,12 @@ from telegram import (
     InputMediaAudio,
 )
 
+from file_service import load_file, save_file
+from user_data_manager import user_data_manager
+from constants import FILE_PATH_POSTS, DATE_TIME_FORMAT, MAX_MEDIA_IN_GROUP
 
 logger = logging.getLogger(__name__)
 
-FILE_PATH = getenv("POSTS_FILE")
-DATE_TIME_FORMAT = getenv("DATE_TIME_FORMAT")
-MAX_MEDIA_IN_GROUP = 10
 MEDIA_GROUP_TYPES = {
     "photo": InputMediaPhoto,
     "video": InputMediaVideo,
@@ -32,11 +29,10 @@ MEDIA_GROUP_TYPES = {
 
 
 def del_posts_from_file(post_id):
-    logger.info(f"DELETE {post_id}")
-    posts = load_file(FILE_PATH)
+    posts = load_file(FILE_PATH_POSTS)
     if post_id in posts:
         del posts[post_id]
-    save_file(posts, FILE_PATH)
+    save_file(posts, FILE_PATH_POSTS)
 
 
 async def set_post_in_scheduler(update: Update, context: CallbackContext, post) -> None:
@@ -119,7 +115,7 @@ async def media_group_sender(
 
 
 async def send_chat_posts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    posts = load_file(FILE_PATH)
+    posts = load_file(FILE_PATH_POSTS)
     reply_to_message_id = update.message.message_id
     chat_id = user_data_manager.get_chat_id()
     photo_id = update.message.photo[-1].file_id
