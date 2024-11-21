@@ -5,6 +5,7 @@ from telegram import Bot
 from telegram import Update
 from telegram.ext import CallbackContext
 from datetime import datetime
+from collections import Counter
 
 from user_data_manager import user_data_manager
 from strings import ERROR_PERMISSION_STRING
@@ -89,7 +90,11 @@ async def check_scheduled_post(update: Update, context: CallbackContext) -> None
 
 
 def count_scheduled_post(context: CallbackContext):
-    scheduler = context.bot_data["scheduler"]
-    jobs = scheduler.get_jobs()
-    scheduled_posts_count = len(jobs)
-    return scheduled_posts_count
+    job_names = [job.name for job in context.job_queue.jobs()]
+    dates = [item.split("_")[1].split(" ")[0] for item in job_names]
+    date_counts = Counter(dates)
+    result = "\n".join(
+        [f"{date}: {count} posts" for date, count in date_counts.items()]
+    )
+
+    return result

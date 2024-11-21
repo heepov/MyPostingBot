@@ -56,7 +56,7 @@ def register_all_handlers(application):
 
 
 def check_access(user_id):
-    return user_id == ADMIN_ID
+    return user_id in ADMIN_ID
 
 
 def check_data():
@@ -195,10 +195,11 @@ async def add(update: Update, context: CallbackContext) -> None:
         return
 
     if check_data():
-        await checkup(update, context)
         if user_data_manager.get_state() != State.ERROR_PERMISSION:
             user_data_manager.set_state(State.CREATING_POST)
             await update.message.reply_text(COMMAND_ADD_POST)
+        else:
+            await update.message.reply_text(ERROR_PERMISSIONS)
     else:
         await update.message.reply_text(ERROR_EMPTY_DATA)
 

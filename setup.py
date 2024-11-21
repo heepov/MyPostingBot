@@ -43,7 +43,7 @@ async def process_setup(
     try:
         # Проверка прав бота в чате
         permission_check = await check_bot_permission(context.bot, channel_info.id)
-        if not permission_check:
+        if permission_check != True:
             await update.message.reply_text(
                 ERROR_PERMISSION_STRING(channel_type, permission_check)
             )
@@ -52,6 +52,7 @@ async def process_setup(
     except Exception as e:
         logger.error(f"Ошибка при обработке {channel_type}: {e}")
         await update.message.reply_text(ERROR_PERMISSION_STRING)
+        return
 
     if is_channel:
         user_data_manager.set_channel_id(channel_info.id)
