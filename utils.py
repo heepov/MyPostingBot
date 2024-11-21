@@ -5,7 +5,7 @@ from telegram import Bot
 from telegram import Update
 from telegram.ext import CallbackContext
 from datetime import datetime
-from collections import Counter
+from collections import defaultdict
 from logging.handlers import RotatingFileHandler
 
 from user_data_manager import user_data_manager
@@ -21,8 +21,8 @@ def setup_logging(level=logging.INFO):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler("bot.log", encoding="utf-8"),
-            logging.StreamHandler()
-        ]
+            logging.StreamHandler(),
+        ],
     )
     handler = RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=5)
 
@@ -95,12 +95,23 @@ async def check_scheduled_post(update: Update, context: CallbackContext) -> None
         await set_post_in_scheduler(update, context, value)
 
 
+def group_by_date(posts):
+    grouped = defaultdict(list)
+
+    for post in posts:
+        _, date_time, name = post.split("_", 2)
+        date = date_time.split(" ")[0]
+        grouped[date].append("#" + name)
+
+    result = []
+    for date, names in grouped.items():
+        result.append(f"{date} [{len(names)}] {', '.join(names)}")
+
+    return "\n".join(result)
+
+
 def count_scheduled_post(context: CallbackContext):
     job_names = [job.name for job in context.job_queue.jobs()]
-    dates = [item.split("_")[1].split(" ")[0] for item in job_names]
-    date_counts = Counter(dates)
-    result = "\n".join(
-        [f"{date}: {count} posts" for date, count in date_counts.items()]
-    )
-
-    return result
+    if not job_names:
+        return "You have not any post. Try use /check_post command."
+    return group_by_date(job_names)

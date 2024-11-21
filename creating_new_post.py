@@ -42,7 +42,7 @@ async def adding_channel_post(update: Update, context: CallbackContext) -> None:
         post = {
             "channel_post": {
                 "channel_id": user_data_manager.get_channel_id(),
-                "text": f"{update.message.caption if update.message.caption else ''}\n\nmore in comments\n@{channel_username}",
+                "text": f"{update.message.caption if update.message.caption else 'error_tag'}\n\nmore in comments\n@{channel_username}",
                 "photo_id": update.message.photo[-1].file_id,
                 "message_id": update.message.message_id,
                 "chat_id": update.message.chat_id,

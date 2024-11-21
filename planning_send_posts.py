@@ -78,6 +78,13 @@ async def send_chat_posts(update: Update, context: CallbackContext):
     del_posts_from_file(photo_id)
 
 
+def extract_first_word(text):
+    if not text:
+        return "error_tag"
+    first_word = text.strip().split()[0].lstrip("#")
+    return first_word
+
+
 # Функция для планирования задачи
 async def set_post_in_scheduler(update: Update, context: CallbackContext, post) -> None:
     post_time = datetime.strptime(
@@ -85,8 +92,9 @@ async def set_post_in_scheduler(update: Update, context: CallbackContext, post) 
     )
     moscow_tz = pytz.timezone("Europe/Moscow")
     post_time = moscow_tz.localize(post_time)
+    short_text = extract_first_word(post["channel_post"].get("text"))
 
-    job_id = f"{post['channel_post'].get('message_id')}_{post['channel_post'].get('scheduled_time')}"
+    job_id = f"{post['channel_post'].get('message_id')}_{post['channel_post'].get('scheduled_time')}_{short_text}"
 
     my_job_queue = context.job_queue
 
@@ -106,6 +114,7 @@ async def set_post_in_scheduler(update: Update, context: CallbackContext, post) 
         logger.info(str(my_job_queue.get_jobs_by_name(job_id)))
     else:
         logger.info(f"Post with job_id={job_id} is already planned.")
+
 
 async def callback_forward_post(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = context.job.data.get("chat_id")

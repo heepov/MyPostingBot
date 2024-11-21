@@ -1,21 +1,34 @@
-from collections import Counter
+from collections import defaultdict
 
 
-def main() -> None:
-    # Исходный массив
-    data = [
-        "444_2024-11-21 20:28",
-        "454_2024-11-21 21:28",
-        "444_2024-11-22 20:28",
-        "454_2024-11-23 21:28",
+def group_by_date(posts):
+    grouped = defaultdict(list)
+
+    for post in posts:
+        _, date_time, name = post.split("_", 2)
+        date = date_time.split(" ")[0]
+        grouped[date].append(name)
+
+    result = []
+    for date, names in grouped.items():
+        result.append(f"{date} [{len(names)}] {', '.join(names)}")
+
+    return result
+
+
+def main():
+    posts = [
+        "5099_2024-11-21 20:16_kimoriiii",
+        "5110_2024-11-21 20:18_arilaviee",
+        "5118_2024-11-22 20:18_angelina_michelle",
+        "5128_2024-11-22 20:20_fairytwins",
     ]
-    dates = [item.split("_")[1].split(" ")[0] for item in data]
-    date_counts = Counter(dates)
-    result = "\n".join(
-        [f"{date}: {count} posts" for date, count in date_counts.items()]
-    )
 
-    print(result)
+    grouped_posts = group_by_date(posts)
+
+    # Вывод результата
+    for item in grouped_posts:
+        print(item)
 
 
 if __name__ == "__main__":
