@@ -90,7 +90,6 @@ async def set_post_in_scheduler(update: Update, context: CallbackContext, post) 
     job_id = f"{post['channel_post'].get('message_id')}_{post['channel_post'].get('scheduled_time')}"
 
     my_job_queue = context.job_queue
-    logger.debug(f"Adding job with job_id={job_id} to the queue at {post_time}")
 
     if not my_job_queue.get_jobs_by_name(job_id):
         my_job_queue.run_once(
@@ -108,6 +107,7 @@ async def set_post_in_scheduler(update: Update, context: CallbackContext, post) 
         logger.info(str(my_job_queue.get_jobs_by_name(job_id)))
     else:
         logger.info(f"Post with job_id={job_id} is already planned.")
+
 
 async def callback_forward_post(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = context.job.data.get("chat_id")
