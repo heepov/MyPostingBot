@@ -1,8 +1,11 @@
 .env
 *.json
+*.log
 
 constants.py
+test.py
 
 old/
 __pycache__/
 venv/
+test/
