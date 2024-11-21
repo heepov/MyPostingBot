@@ -108,7 +108,6 @@ async def set_post_in_scheduler(update: Update, context: CallbackContext, post) 
     else:
         logger.info(f"Post with job_id={job_id} is already planned.")
 
-
 async def callback_forward_post(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = context.job.data.get("chat_id")
     text = context.job.data.get("text")
