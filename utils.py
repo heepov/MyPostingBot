@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 from datetime import datetime
 from collections import Counter
+from logging.handlers import RotatingFileHandler
 
 from user_data_manager import user_data_manager
 from strings import ERROR_PERMISSION_STRING
@@ -16,9 +17,14 @@ from constants import DATE_TIME_FORMAT, FILE_PATH_POSTS
 
 def setup_logging(level=logging.INFO):
     logging.basicConfig(
+        level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=level,
+        handlers=[
+            logging.FileHandler("bot.log", encoding="utf-8"),
+            logging.StreamHandler()
+        ]
     )
+    handler = RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=5)
 
 
 logger = logging.getLogger(__name__)
