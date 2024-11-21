@@ -105,7 +105,7 @@ def group_by_date(posts):
 
     result = []
     for date, names in grouped.items():
-        result.append(f"{date} [{len(names)}] {', '.join(names)}")
+        result.append(f"{date} |{len(names)}| {' | '.join(names)}")
 
     return "\n".join(result)
 
