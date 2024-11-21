@@ -3,6 +3,7 @@
 *.log
 
 constants.py
+0_test.py
 
 old/
 __pycache__/
