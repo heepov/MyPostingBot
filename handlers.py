@@ -56,7 +56,7 @@ def register_all_handlers(application):
 
 
 def check_access(user_id):
-    return user_id == ADMIN_ID
+    return user_id in ADMIN_ID
 
 
 def check_data():

@@ -30,7 +30,7 @@ COMMAND_HELP = (
 COMMAND_CANCEL = "All actions have been canceled."
 COMMAND_SETUP = "To connect a channel, send me CHANNEL link or username."
 COMMAND_ADD_POST = "Send the post (image and text):"
-COMMAND_COUNT = lambda count: f"You have planned {count}"
+COMMAND_COUNT = lambda count: f"You have planned \n{count}"
 
 ADD_POST_MEDIA_FILES = "Now upload the file that will be included as a comment. Once uploaded, send the /time command."
 
@@ -44,7 +44,7 @@ ERROR_DATE_TIME_PAST = "The date and time must be in the future."
 ERROR_NEED_CANCEL = "This command work only after use /cancel command."
 SUCCESS_PERMISSION = "The bot has all the required permissions."
 SUCCESS_POST_SCHEDULED = "Success! Your post has been scheduled."
-SUCCESS_POSTS_CHECKED = lambda count_posts: f"Success! You have : {count_posts} posts."
+SUCCESS_POSTS_CHECKED = lambda count_posts: f"Success! You have : \n{count_posts}"
 CHANNELS_INFO_STRING = lambda channel_username, chat_username: (
     f"Connected channels:\n"
     f"Channel: @{channel_username}\n"

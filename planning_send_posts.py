@@ -1,7 +1,6 @@
 # planning_send_post.py
 
 import logging
-from apscheduler.triggers.date import DateTrigger
 from datetime import datetime
 from telegram.ext import CallbackContext, ContextTypes, JobQueue, Updater
 from telegram import (
