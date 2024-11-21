@@ -195,10 +195,11 @@ async def add(update: Update, context: CallbackContext) -> None:
         return
 
     if check_data():
-        await checkup(update, context)
         if user_data_manager.get_state() != State.ERROR_PERMISSION:
             user_data_manager.set_state(State.CREATING_POST)
             await update.message.reply_text(COMMAND_ADD_POST)
+        else:
+            await update.message.reply_text(ERROR_PERMISSIONS)
     else:
         await update.message.reply_text(ERROR_EMPTY_DATA)
 
