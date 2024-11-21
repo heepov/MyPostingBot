@@ -8,3 +8,4 @@ test.py
 old/
 __pycache__/
 venv/
+test/
