@@ -1,30 +1,34 @@
 # utils.py
 
 import logging
-from telegram import Bot
-from telegram import Update
-from telegram.ext import CallbackContext
-from datetime import datetime
 from collections import defaultdict
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from user_data_manager import user_data_manager
-from strings import ERROR_PERMISSION_STRING
+from telegram import Bot, Update
+from telegram.ext import CallbackContext
+
+from constants import DATE_TIME_FORMAT, FILE_PATH_POSTS
 from file_service import load_file, save_file
 from planning_send_posts import set_post_in_scheduler
-from constants import DATE_TIME_FORMAT, FILE_PATH_POSTS
+from strings import ERROR_PERMISSION_STRING
+from user_data_manager import user_data_manager
 
 
 def setup_logging(level=logging.INFO):
     logging.basicConfig(
-        level=logging.INFO,
+        level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler("bot.log", encoding="utf-8"),
-            logging.StreamHandler(),
+            logging.StreamHandler(),  # Вывод в консоль
+            RotatingFileHandler(
+                "bot.log", maxBytes=5_000_000, backupCount=5, encoding="utf-8"
+            ),  # Ротация логов
         ],
     )
-    handler = RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=5)
+
+    # Настроим уровень логирования для httpx
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 logger = logging.getLogger(__name__)

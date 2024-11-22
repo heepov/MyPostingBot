@@ -1,35 +1,42 @@
 # handlers.py
 
 import logging
-from telegram import Update
-from telegram.ext import CallbackContext
-from telegram.ext import CommandHandler, MessageHandler, filters
 
-from user_data_manager import user_data_manager
+from telegram import Update
+from telegram import constants
+from telegram.ext import (
+    CallbackContext,
+    ChatMemberHandler,
+    CommandHandler,
+    MessageHandler,
+    filters,
+)
+
+from constants import ADMIN_ID
 from creating_new_post import adding_channel_post, adding_media, set_time
 from planning_send_posts import send_chat_posts
 from setup import process_setup
-from utils import check_all_permission, check_scheduled_post, count_scheduled_post
 from states import State
-from constants import ADMIN_ID
 from strings import (
-    COMMAND_TIME,
     CHANNELS_INFO_STRING,
+    COMMAND_ADD_POST,
+    COMMAND_CANCEL,
+    COMMAND_COUNT,
+    COMMAND_HELP,
+    COMMAND_SETUP,
+    COMMAND_START,
+    COMMAND_TIME,
     ERROR_ACCESS_DENIED,
     ERROR_EMPTY_DATA,
     ERROR_INVALID_COMMAND,
-    ERROR_PERMISSIONS,
-    COMMAND_HELP,
-    COMMAND_START,
-    COMMAND_CANCEL,
-    SUCCESS_POSTS_CHECKED,
-    COMMAND_SETUP,
-    COMMAND_ADD_POST,
-    SUCCESS_PERMISSION,
-    EXTRA_SETUP_ALREADY,
     ERROR_NEED_CANCEL,
-    COMMAND_COUNT,
+    ERROR_PERMISSIONS,
+    EXTRA_SETUP_ALREADY,
+    SUCCESS_PERMISSION,
+    SUCCESS_POSTS_CHECKED,
 )
+from user_data_manager import user_data_manager
+from utils import check_all_permission, check_scheduled_post, count_scheduled_post
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +51,7 @@ def register_all_handlers(application):
     application.add_handler(CommandHandler("check_post", check_post))
     application.add_handler(CommandHandler("add", add))
     application.add_handler(CommandHandler("time", time))
+    application.add_handler(ChatMemberHandler(on_chat_member_update))
 
     application.add_handler(
         MessageHandler(
@@ -269,6 +277,37 @@ async def bot_reply_messages_from_chat(
         return
     if update.message.photo and len(update.message.photo) > 0:
         await send_chat_posts(update, context)
+
+
+async def on_chat_member_update(update, context):
+    if not check_data():
+        return
+
+    chat_id = update.my_chat_member.chat.id
+    member = update.my_chat_member.new_chat_member
+    bot = await context.bot.get_me()
+
+    if chat_id not in [
+        user_data_manager.get_chat_id(),
+        user_data_manager.get_channel_id(),
+    ]:
+        return
+
+    if member.user.id != bot.id:
+        return
+
+    if member.status == constants.ChatMemberStatus.ADMINISTRATOR:
+        can_post_messages = getattr(member, "can_post_messages", None)
+        if can_post_messages is None:
+            logger.info(f"{SUCCESS_PERMISSION} in the CHAT")
+        elif can_post_messages:
+            logger.info(f"{SUCCESS_PERMISSION} in the CHANNEL")
+        else:
+            logger.info(f"{ERROR_PERMISSIONS} in the CHANNEL")
+            user_data_manager.set_state(ERROR_PERMISSIONS)
+    else:
+        logger.info(f"{ERROR_PERMISSIONS}")
+        user_data_manager.set_state(ERROR_PERMISSIONS)
 
 
 def log_processing_info(update: Update, type):
