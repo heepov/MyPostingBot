@@ -3,3 +3,5 @@ telegram
 pytz
 python-telegram-bot[job-queue]
 pydantic
+psycopg2
+peewee psycopg2

@@ -16,7 +16,7 @@ from telegram.helpers import effective_message_type
 
 from actions_chat import get_channel_string
 from actions_user import get_user_data
-from constants import DATE_TIME_FORMAT
+from secret import DATE_TIME_FORMAT
 from globals import DATE_TIME_FORMAT_PRINT, save_user_data_to_file
 from message import Message
 from post import Post

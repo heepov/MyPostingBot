@@ -1,0 +1,8 @@
+# BOT_TOKEN = "7537652378:AAGi4hDZrGQwbChmfnV3js6jcO5DQNm4Ufg"
+BOT_TOKEN = "7611948716:AAE84y9-cEP_tOhFY5cRw9X-7tLVrEybRq8"
+
+DB_NAME = "posting_bot_db"
+DB_USER = "postgres"
+DB_PASSWORD = ""
+DB_HOST = "localhost"
+DB_PORT = 5432
