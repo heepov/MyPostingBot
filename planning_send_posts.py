@@ -12,7 +12,7 @@ from telegram import (
 )
 from file_service import load_file, save_file
 from user_data_manager import user_data_manager
-from constants import FILE_PATH_POSTS, DATE_TIME_FORMAT, MAX_MEDIA_IN_GROUP
+from constants import FILE_PATH_POST_QUEUE, DATE_TIME_FORMAT, MAX_MEDIA_IN_GROUP
 from itertools import groupby
 from operator import itemgetter
 from collections import defaultdict
@@ -29,10 +29,10 @@ MEDIA_GROUP_TYPES = {
 
 
 def del_posts_from_file(post_id):
-    posts = load_file(FILE_PATH_POSTS)
+    posts = load_file(FILE_PATH_POST_QUEUE)
     if post_id in posts:
         del posts[post_id]
-    save_file(posts, FILE_PATH_POSTS)
+    save_file(posts, FILE_PATH_POST_QUEUE)
 
 
 async def send_media_group_with_timeout(
@@ -53,7 +53,7 @@ async def send_media_group_with_timeout(
 
 
 async def send_chat_posts(update: Update, context: CallbackContext):
-    posts = load_file(FILE_PATH_POSTS)
+    posts = load_file(FILE_PATH_POST_QUEUE)
     reply_to_message_id = update.message.message_id
     chat_id = user_data_manager.get_chat_id()
     photo_id = update.message.photo[-1].file_id

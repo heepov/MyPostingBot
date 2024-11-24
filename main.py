@@ -5,21 +5,19 @@ import logging
 from telegram.ext import Application
 
 from constants import BOT_TOKEN
-from handlers import register_all_handlers
-from user_data_manager import user_data_manager
-from utils import files_cleaner, setup_logging
+
+from handlers_new import reg_all_handlers
+from utils import setup_logging
+from globals import user_data_list, posts_queue, load_user_data_from_file
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
-files_cleaner()
-
 
 def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
-    user_data_manager.get_state()
-    
-    register_all_handlers(application)
+
+    reg_all_handlers(application)
     application.run_polling()
 
 

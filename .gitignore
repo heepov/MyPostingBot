@@ -1,13 +1,22 @@
+# Ignore IDE and editor specific files
 .env
 .venv
 .vscode
+
+*.DS_Store
 *.json
 *.log
 *.code-workspace
+
+# Ignore Python bytecode files
+__pycache__/
+
+# Ignore development environment
+venv/
+
+# Ignore test files
+test/
+
+# Ignore specific files
 constants.py
 test.py
-
-old/
-__pycache__/
-venv/
-test/

@@ -14,7 +14,7 @@ class UserDataManager:
         self.channel_id = None
         self.chat_id = None
 
-        self.state: State = State.ERROR_DATA
+        self.state: State = State.ERROR
         self.post = None
         self.load_data()
 

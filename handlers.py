@@ -1,6 +1,9 @@
 # handlers.py
 
 import logging
+import pprint
+import ast
+import json
 
 from telegram import Update
 from telegram import constants
@@ -12,10 +15,13 @@ from telegram.ext import (
     filters,
 )
 
+from post import Post
+
+
 from constants import ADMIN_ID
 from creating_new_post import adding_channel_post, adding_media, set_time
 from planning_send_posts import send_chat_posts
-from setup import process_setup
+from actions_chat import process_setup
 from states import State
 from strings import (
     CHANNELS_INFO_STRING,
@@ -40,27 +46,35 @@ from utils import check_all_permission, check_scheduled_post, count_scheduled_po
 
 logger = logging.getLogger(__name__)
 
+from telegram.helpers import effective_message_type
+
 
 def register_all_handlers(application):
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help))
-    application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(CommandHandler("checkup", checkup))
-    application.add_handler(CommandHandler("setup", setup))
-    application.add_handler(CommandHandler("count", count))
-    application.add_handler(CommandHandler("check_post", check_post))
-    application.add_handler(CommandHandler("add", add))
-    application.add_handler(CommandHandler("time", time))
-    application.add_handler(ChatMemberHandler(on_chat_member_update))
+    application.add_handler(CommandHandler("add_post", add_post))
+    application.add_handler(CommandHandler("add_post_chat", add_post_chat))
+    application.add_handler(CommandHandler("set_post_time", set_post_time))
+    application.add_handler(CommandHandler("user_setup", user_setup))
+
+    # application.add_handler(CommandHandler("start", start))
+    # application.add_handler(CommandHandler("help", help))
+    # application.add_handler(CommandHandler("cancel", cancel))
+    # application.add_handler(CommandHandler("checkup", checkup))
+    # application.add_handler(CommandHandler("setup", setup))
+    # application.add_handler(CommandHandler("count", count))
+    # application.add_handler(CommandHandler("check_post", check_post))
+    # application.add_handler(CommandHandler("add", add))
+    # application.add_handler(CommandHandler("time", time))
+    # application.add_handler(ChatMemberHandler(on_chat_member_update))
 
     application.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE & ~filters.COMMAND, bot_private_massage_handlers
         )
     )
-    application.add_handler(
-        MessageHandler(~filters.COMMAND, bot_reply_messages_from_chat)
-    )
+    # application.add_handler(
+    #     MessageHandler(~filters.COMMAND, bot_reply_messages_from_chat)
+    # )
 
 
 def check_access(user_id):
@@ -69,13 +83,13 @@ def check_access(user_id):
 
 def check_data():
     if (
-        user_data_manager.get_state() != State.ERROR_DATA
+        user_data_manager.get_state() != State.ERROR_CHANNEL_DATA
         and user_data_manager.get_channel_id()
         and user_data_manager.get_chat_id()
     ):
         return True
     else:
-        user_data_manager.set_state(State.ERROR_DATA)
+        user_data_manager.set_state(State.ERROR_CHANNEL_DATA)
         return False
 
 
@@ -83,37 +97,69 @@ def check_data():
 async def bot_private_massage_handlers(
     update: Update, context: CallbackContext
 ) -> None:
+    await update.message.reply_text(json.dumps(scheduled_post.to_dict(), indent=4))
+    if user_data_manager.get_state() == State.ADD_POST:
+        message = update.effective_message
 
-    if not check_access(update.message.from_user.id):
-        await update.message.reply_text(ERROR_ACCESS_DENIED)
-        return
+        scheduled_post.user_id = message.from_user.id
+        scheduled_post.post_id = message.message_id
+        scheduled_post.channel_id = user_data_manager.get_channel_id()
+        scheduled_post.chat_id = user_data_manager.get_chat_id()
 
-    user_id = update.message.from_user.id
-    state = user_data_manager.get_state()
+        await new_post.add_message(update, context, scheduled_post, "channel")
+    elif user_data_manager.get_state() == State.ADD_POST_CHAT:
+        await new_post.add_message(update, context, scheduled_post, "chat")
+    elif user_data_manager.get_state() == State.SET_POST_TIME:
+        await new_post.set_post_time(update, context, scheduled_post)
+    # if not check_access(update.message.from_user.id):
+    #     await update.message.reply_text(ERROR_ACCESS_DENIED)
+    #     return
 
-    log_processing_info(update, "message")
+    # user_id = update.message.from_user.id
+    # state = user_data_manager.get_state()
 
-    if check_data():
-        if state == State.CREATING_POST:
-            await adding_channel_post(update, context)
-            return
-        elif state == State.ADDING_MEDIA:
-            await adding_media(update, context)
-            return
-        elif state == State.SETTING_TIMER:
-            await set_time(update, context)
-            return
+    # log_processing_info(update, "message")
 
-    if state == State.ERROR_DATA:
-        await update.message.reply_text(ERROR_EMPTY_DATA)
-    elif state == State.ERROR_PERMISSION:
-        await update.message.reply_text(ERROR_PERMISSIONS)
-    elif state == State.ADDING_CHANNEL:
-        await process_setup(update, context, True)
-    elif state == State.ADDING_CHAT:
-        await process_setup(update, context, False)
-    else:
-        await update.message.reply_text(ERROR_INVALID_COMMAND)
+    # if check_data():
+    #     if state == State.CREATING_POST:
+    #         await adding_channel_post(update, context)
+    #         return
+    #     elif state == State.ADDING_MEDIA:
+    #         await adding_media(update, context)
+    #         return
+    #     elif state == State.SETTING_TIMER:
+    #         await set_time(update, context)
+    #         return
+
+    # if state == State.ERROR_DATA:
+    #     await update.message.reply_text(ERROR_EMPTY_DATA)
+    # elif state == State.ERROR_PERMISSION:
+    #     await update.message.reply_text(ERROR_PERMISSIONS)
+    # elif state == State.ADDING_CHANNEL:
+    #     await process_setup(update, context, True)
+    # elif state == State.ADDING_CHAT:
+    #     await process_setup(update, context, False)
+    # else:
+    #     await update.message.reply_text(ERROR_INVALID_COMMAND)
+
+
+# Command /add
+async def add_post(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/add")
+    user_data_manager.set_state(State.ADD_POST)
+    await update.message.reply_text("ADD POST TO CHANNEL")
+
+
+async def add_post_chat(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/add_post_chat")
+    user_data_manager.set_state(State.ADD_POST_CHAT)
+    await update.message.reply_text("ADD POST TO CHAT")
+
+
+async def set_post_time(update: Update, context: CallbackContext) -> None:
+    log_processing_info(update, "/set_post_time")
+    user_data_manager.set_state(State.SET_POST_TIME)
+    await update.message.reply_text("SET POST TIME")
 
 
 # Command /start
@@ -146,7 +192,7 @@ async def cancel(update: Update, context: CallbackContext) -> None:
         user_data_manager.reset_state()
         await update.message.reply_text(COMMAND_CANCEL)
     else:
-        user_data_manager.set_state(State.ERROR_DATA)
+        user_data_manager.set_state(State.ERROR_CHANNEL_DATA)
         await update.message.reply_text(ERROR_EMPTY_DATA)
 
 
@@ -162,7 +208,7 @@ async def checkup(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text(SUCCESS_PERMISSION)
         else:
             await update.message.reply_text(check)
-            user_data_manager.set_state(State.ERROR_PERMISSION)
+            user_data_manager.set_state(State.ERROR_CHANNEL_PERMISSION)
     else:
         await update.message.reply_text(ERROR_EMPTY_DATA)
 
@@ -175,7 +221,7 @@ async def setup(update: Update, context: CallbackContext) -> None:
         return
 
     if check_data():
-        user_data_manager.set_state(State.ADDING_CHANNEL)
+        user_data_manager.set_state(State.ADD_CHANNEL)
         channel_username = user_data_manager.get_channel_id()
         chat_username = user_data_manager.get_chat_id()
 
@@ -191,7 +237,7 @@ async def setup(update: Update, context: CallbackContext) -> None:
             f"{CHANNELS_INFO_STRING(channel_username, chat_username)}\n{EXTRA_SETUP_ALREADY}"
         )
     else:
-        user_data_manager.set_state(State.ADDING_CHANNEL)
+        user_data_manager.set_state(State.ADD_CHANNEL)
         await update.message.reply_text(COMMAND_SETUP)
 
 
@@ -203,7 +249,7 @@ async def add(update: Update, context: CallbackContext) -> None:
         return
 
     if check_data():
-        if user_data_manager.get_state() != State.ERROR_PERMISSION:
+        if user_data_manager.get_state() != State.ERROR_CHANNEL_PERMISSION:
             user_data_manager.set_state(State.CREATING_POST)
             await update.message.reply_text(COMMAND_ADD_POST)
         else:
@@ -267,7 +313,7 @@ async def bot_reply_messages_from_chat(
     try:
         if (
             not update.message
-            or user_data_manager.get_state() == State.ERROR_DATA
+            or user_data_manager.get_state() == State.ERROR_CHANNEL_DATA
             or update.message.reply_to_message
             or update.message.from_user.first_name != "Telegram"
         ):
