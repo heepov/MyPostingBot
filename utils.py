@@ -9,9 +9,9 @@ from telegram import Bot, Update
 from telegram.ext import CallbackContext
 
 from file_service import load_file, save_file
-from planning_send_posts import set_post_in_scheduler
-from strings import ERROR_PERMISSION_STRING
-from user_data_manager import user_data_manager
+from old.planning_send_posts import set_post_in_scheduler
+from old.strings import ERROR_PERMISSION_STRING
+from old.user_data_manager import user_data_manager
 
 from globals import user_data_list
 
@@ -24,9 +24,9 @@ def setup_logging(level=logging.INFO):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.StreamHandler(),  # Вывод в консоль
-            RotatingFileHandler(
-                "bot.log", maxBytes=5_000_000, backupCount=5, encoding="utf-8"
-            ),  # Ротация логов
+            #     RotatingFileHandler(
+            #         "bot.log", maxBytes=5_000_000, backupCount=5, encoding="utf-8"
+            #     ),  # Ротация логов
         ],
     )
 

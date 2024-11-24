@@ -6,7 +6,7 @@ from telegram.ext import Application
 
 from constants import BOT_TOKEN
 
-from handlers_new import reg_all_handlers
+from handlers import reg_all_handlers
 from utils import setup_logging
 from globals import user_data_list, posts_queue, load_user_data_from_file
 

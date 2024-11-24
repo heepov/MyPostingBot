@@ -76,18 +76,6 @@ class UserData(BaseModel):
 
         return False
 
-    # def get_chat_id_by_channel_id(self, channel_id: int) -> int:
-    #     for channel in self.channels:
-    #         if channel.channel_id == channel_id:
-    #             return channel.chat_id
-    #     return None
-
-    # def get_channel_id_by_chat_id(self, chat_id: int) -> int:
-    #     for channel in self.channels:
-    #         if channel.chat_id == chat_id:
-    #             return channel.channel_id
-    #     return None
-
     def to_dict(self):
         return {
             "user_id": self.user_id,

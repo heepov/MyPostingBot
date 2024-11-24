@@ -16,6 +16,7 @@ venv/
 
 # Ignore test files
 test/
+old/
 
 # Ignore specific files
 constants.py

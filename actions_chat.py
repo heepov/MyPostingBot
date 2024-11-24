@@ -6,7 +6,7 @@ from telegram.ext import CallbackContext, CommandHandler
 import logging
 from user_data import Channel
 from states import State
-from strings import (
+from old.strings import (
     ERROR_PERMISSION_STRING,
     CHAT_SETUP_STRING,
     ERROR_CHANNEL_LINK,
