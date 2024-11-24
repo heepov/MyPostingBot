@@ -1,18 +1,20 @@
 # setup.py
 
-from utils import check_bot_permission, check_link, log_processing_info
+import logging
+
 from telegram import Update
 from telegram.ext import CallbackContext, CommandHandler
-import logging
-from user_data import Channel
-from states import State
+
 from old.strings import (
-    ERROR_PERMISSION_STRING,
+    CHANNEL_SETUP_STRING,
     CHAT_SETUP_STRING,
     ERROR_CHANNEL_LINK,
     ERROR_GET_CHANNEL_INFO,
-    CHANNEL_SETUP_STRING,
+    ERROR_PERMISSION_STRING,
 )
+from states import State
+from user_data import Channel
+from utils import check_bot_permission, check_link, log_processing_info
 
 tmp_chat = Channel()
 
@@ -20,10 +22,12 @@ from actions_user import get_user_data
 
 logger = logging.getLogger(__name__)
 
-def reg_chat_handlers(application)->None:
+
+def reg_chat_handlers(application) -> None:
     application.add_handler(CommandHandler("channels", cmd_channels))
     application.add_handler(CommandHandler("add_channel", cmd_add_channel))
     application.add_handler(CommandHandler("delete_channel", cmd_delete_channel))
+
 
 async def actions_chat_handlers(update: Update, context: CallbackContext) -> None:
     user = await get_user_data(update)

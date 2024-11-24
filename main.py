@@ -5,10 +5,9 @@ import logging
 from telegram.ext import Application
 
 from constants import BOT_TOKEN
-
+from globals import load_user_data_from_file, posts_queue, user_data_list
 from handlers import reg_all_handlers
 from utils import setup_logging
-from globals import user_data_list, posts_queue, load_user_data_from_file
 
 setup_logging()
 logger = logging.getLogger(__name__)

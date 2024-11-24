@@ -8,14 +8,12 @@ from logging.handlers import RotatingFileHandler
 from telegram import Bot, Update
 from telegram.ext import CallbackContext
 
+from actions_user import get_user_data
 from file_service import load_file, save_file
+from globals import user_data_list
 from old.planning_send_posts import set_post_in_scheduler
 from old.strings import ERROR_PERMISSION_STRING
 from old.user_data_manager import user_data_manager
-
-from globals import user_data_list
-
-from actions_user import get_user_data
 
 
 def setup_logging(level=logging.INFO):

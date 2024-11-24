@@ -1,10 +1,12 @@
 # actions_user.py
 
-from telegram import Update
 import logging
+
+from telegram import Update
+
+from globals import save_user_data_to_file, user_data_list
 from states import State
 from user_data import UserData
-from globals import user_data_list, save_user_data_to_file
 
 logger = logging.getLogger(__name__)
 

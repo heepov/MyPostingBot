@@ -11,30 +11,18 @@ from telegram.ext import (
     filters,
 )
 
+from actions_chat import actions_chat_handlers, reg_chat_handlers
+from actions_post import actions_post_handlers, reg_post_handlers
+from actions_user import get_user_data
+from file_service import load_file, save_file
+from globals import (
+    load_user_data_from_file,
+    posts_queue,
+    save_user_data_to_file,
+    user_data_list,
+)
 from states import State
 from utils import log_processing_info
-from file_service import load_file, save_file
-
-from globals import (
-    posts_queue,
-    user_data_list,
-    load_user_data_from_file,
-    save_user_data_to_file,
-)
-
-from actions_user import (
-    get_user_data,
-)
-
-from actions_post import (
-    reg_post_handlers,
-    actions_post_handlers
-)
-
-from actions_chat import (
-    reg_chat_handlers,
-    actions_chat_handlers
-)
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +57,12 @@ async def bot_private_massage_handlers(
     if state in [State.ADD_CHANNEL, State.ADD_CHAT, State.DELETE_CHANNEL]:
         await actions_chat_handlers(update, context)
         return
-    if state in [State.ADD_POST, State.ADD_POST_CHAT, State.SET_POST_TIME, State.SET_CHANNEL]:
+    if state in [
+        State.ADD_POST,
+        State.ADD_POST_CHAT,
+        State.SET_POST_TIME,
+        State.SET_CHANNEL,
+    ]:
         await actions_post_handlers(update, context)
         return
 

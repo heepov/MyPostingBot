@@ -1,13 +1,13 @@
 # user_data_manager.py
 
 import logging
-
-from states import State
-
 from datetime import datetime, timedelta, timezone
 from typing import List, Literal, Optional
+
 from pydantic import BaseModel, field_validator
+
 from post import Post
+from states import State
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class Channel(BaseModel):
             "chat_id": self.chat_id,
             "chat_permission": self.chat_permission,
         }
-    
+
     def reset(self):
         self.channel_id = None
         self.channel_permission = False
