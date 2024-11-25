@@ -10,16 +10,30 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-from action_db import create_user, get_user_state
+from action_db import (
+    db_create_user,
+    db_get_user_state,
+    db_get_post_by_sended_message_id,
+    db_get_messages_by_post,
+    db_get_chat_by_channel,
+)
 from service_db import State
 from actions_chat import (
-    actions_chat_handlers,
+    handle_chat_messages,
     cmd_add_channel,
-    cmd_channels,
-    cmd_set_channel
+    cmd_show_channels,
+    cmd_select_channel,
 )
+from actions_post import (
+    handle_post_messages,
+    cmd_add_post,
+    cmd_add_post_chat,
+    cmd_post_time,
+    cmd_set_channel,
+)
+from send_post_logic import send_messages_at_comment
 from telegram.helpers import effective_message_type
-from action_db import set_user_state
+from action_db import db_set_user_state
 
 logger = logging.getLogger(__name__)
 
@@ -28,17 +42,37 @@ def reg_all_handlers(application):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
 
-    application.add_handler(CommandHandler("channels", cmd_channels))
+    application.add_handler(CommandHandler("my_channels", cmd_show_channels))
     application.add_handler(CommandHandler("add_channel", cmd_add_channel))
-    application.add_handler(CommandHandler("set_channel", cmd_set_channel))
+    application.add_handler(CommandHandler("settings_channel", cmd_select_channel))
 
-    # application.add_handler(CommandHandler("delete_channel", cmd_delete_channel))
+    application.add_handler(CommandHandler("add_post", cmd_add_post))
+    application.add_handler(CommandHandler("add_post_chat", cmd_add_post_chat))
+    application.add_handler(CommandHandler("time", cmd_post_time))
+    application.add_handler(CommandHandler("set_channel", cmd_set_channel))
 
     application.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE & ~filters.COMMAND, bot_private_massage_handlers
         )
     )
+    application.add_handler(
+        MessageHandler(~filters.COMMAND, bot_reply_messages_from_chat)
+    )
+
+
+async def bot_reply_messages_from_chat(
+    update: Update, context: CallbackContext
+) -> None:
+    if update.effective_message.forward_origin:
+        logger.info("Это пересланное сообщение")
+        logger.info(f"{update.effective_message.forward_origin.chat.id}")
+        logger.info(f"{update.effective_message.forward_origin.message_id}")
+        # logger.info(f"{update.effective_message.chat_id}")
+        # logger.info(f"{update.effective_message.message_id}")
+        await send_messages_at_comment(update, context)
+    else:
+        logger.warning("Это сообщение не является пересланным.")
 
 
 # Private message processing (from bot and not command)
@@ -46,26 +80,38 @@ async def bot_private_massage_handlers(
     update: Update, context: CallbackContext
 ) -> None:
     user = update.effective_user
-    create_user(user)
-    state = get_user_state(user.id)
+    db_create_user(user)
+    state = db_get_user_state(user.id)
 
-    if effective_message_type(update.effective_message) != "text":
-        await update.message.reply_text("Wrong input. Try again")
+    if state in [
+        State.ADD_CHANNEL,
+        State.CHANNEL_SELECT,
+        State.CHANNEL_SETTINGS,
+        State.ADD_CHAT,
+    ]:
+        if effective_message_type(update.effective_message) != "text":
+            await update.message.reply_text("Wrong input. Try again")
+            return
+        await handle_chat_messages(update, context)
         return
 
-    if state in [State.ADD_CHANNEL, State.ADD_CHAT, State.DELETE_CHANNEL, State.CHANNEL_SETTINGS, State.CHOOSE_ACTION]:
-        await actions_chat_handlers(update, context)
+    elif state in [
+        State.ADD_POST,
+        State.ADD_POST_CHAT,
+        State.SET_POST_TIME,
+        State.SET_CHANNEL,
+    ]:
+        if effective_message_type(update.effective_message) != "text" and state in [
+            State.SET_POST_TIME,
+            State.SET_CHANNEL,
+        ]:
+            await update.message.reply_text("Wrong input. Try again")
+            return
+        await handle_post_messages(update, context)
         return
+    else:
+        await update.message.reply_text("Hi")
 
-
-#     if state in [
-#         State.ADD_POST,
-#         State.ADD_POST_CHAT,
-#         State.SET_POST_TIME,
-#         State.SET_CHANNEL,
-#     ]:
-#         await actions_post_handlers(update, context)
-#         return
 
 #     if state == State.IDLE:
 #         await start(update, context)
@@ -88,7 +134,7 @@ async def start(update: Update, context: CallbackContext) -> None:
 
 
 async def cancel(update: Update, context: CallbackContext) -> None:
-    state = set_user_state(update.effective_user.id, State.IDLE)
+    state = db_set_user_state(update.effective_user.id, State.IDLE)
 
 
 #     user = await get_user_data(update)

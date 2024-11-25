@@ -6,43 +6,67 @@ from telegram import Update
 from telegram.ext import CallbackContext
 
 from action_db import (
-    create_channel,
-    create_user,
-    del_channel,
-    del_chat,
-    get_all_user_channels,
-    get_channel_chat,
-    get_selected_channel,
-    get_user_state,
-    is_channel_exists_for_user,
-    set_channel_selected,
-    set_user_state,
+    db_create_channel_or_chat,
+    db_create_user,
+    db_delete_channel,
+    db_delete_chat,
+    db_get_all_user_channels,
+    db_get_chat_by_channel,
+    db_get_selected_channel,
+    db_get_user_state,
+    db_get_channel,
+    db_set_selected_channel,
+    db_set_user_state,
 )
 from service_db import State
 from utils import check_bot_permission, check_link
 
 logger = logging.getLogger(__name__)
-required_states = [State.IDLE, State.ERROR]
 
 
-async def actions_chat_handlers(update: Update, context: CallbackContext) -> None:
-    global channel_id
+async def command_checker(
+    update: Update, context: CallbackContext, required_states
+) -> bool:
     user = update.effective_user
-    create_user(user)
-    state = get_user_state(user.id)
-    logger.info(f"STATE {state}")
-    if not state:
+    db_create_user(user)
+    state = db_get_user_state(user.id)
+    logger.info(f"HERE {state}")
+    if state == None:
         await update.message.reply_text("Shit happened! Use /cancel")
+        return False
+
+    if state not in required_states:
+        await update.message.reply_text("Finish your current task first!")
+        return False
+    else:
+        return True
+
+
+async def handle_chat_messages(update: Update, context: CallbackContext) -> None:
+
+    if not await command_checker(
+        update,
+        context,
+        [
+            State.ADD_CHANNEL,
+            State.CHANNEL_SELECT,
+            State.CHANNEL_SETTINGS,
+            State.ADD_CHAT,
+        ],
+    ):
         return
 
+    user = update.effective_user
+    state = db_get_user_state(user.id)
+
     if state == State.ADD_CHANNEL:
-        await add_channel(update, context, True)
+        await handle_add_channel(update, context, True)
+    elif state == State.CHANNEL_SELECT:
+        await handle_select_channel(update, context)
     elif state == State.CHANNEL_SETTINGS:
-        await set_channel(update, context)
-    elif state == State.CHOOSE_ACTION:
-        await choose_action(update, context)
+        await handle_channel_settings(update, context)
     elif state == State.ADD_CHAT:
-        await add_channel(update, context, False)
+        await handle_add_channel(update, context, False)
     else:
         await update.message.reply_text("Shit happened! Use /cancel")
 
@@ -51,13 +75,13 @@ def get_channel_string(channels) -> str:
     if len(channels) == 0:
         return f"You dont have any channels"
 
-    str = "Your channels:\n"
+    str = ""
     i = 1
     for channel in channels:
         if channel.permission:
             str += f"{i} @{channel.username}"
             i += 1
-            chat = get_channel_chat(channel.channel_id)
+            chat = db_get_chat_by_channel(channel.channel_id)
             if chat != None:
                 if chat.permission:
                     str += f" connected with chat: @{chat.username}"
@@ -65,92 +89,83 @@ def get_channel_string(channels) -> str:
     return str
 
 
-async def cmd_channels(update: Update, context: CallbackContext):
-    user = update.effective_user
-    create_user(user)
-    state = get_user_state(user.id)
-
-    if not state:
-        await update.message.reply_text("Shit happened! Use /cancel")
+async def cmd_show_channels(update: Update, context: CallbackContext):
+    if not await command_checker(update, context, [State.IDLE]):
         return
 
-    channels = get_all_user_channels(user.id)
+    user = update.effective_user
 
-    await update.message.reply_text(get_channel_string(channels))
+    channels = db_get_all_user_channels(user.id)
+    await update.message.reply_text(f"Your channels:\n{get_channel_string(channels)}")
 
 
 async def cmd_add_channel(update: Update, context: CallbackContext):
-    user = update.effective_user
-    create_user(user)
-    state = get_user_state(user.id)
+    if not await command_checker(update, context, [State.IDLE, State.ERROR]):
+        return
 
-    if not state:
-        await update.message.reply_text("Shit happened! Use /cancel")
-        return
-    if state not in required_states:
-        await update.message.reply_text("Finish your current task first!")
-        return
+    user = update.effective_user
 
     await update.message.reply_text(
         "Send me your CHANNEL link or username. Or use /cancel"
     )
-    set_user_state(user.id, State.ADD_CHANNEL)
+    db_set_user_state(user.id, State.ADD_CHANNEL)
 
 
-async def cmd_set_channel(update: Update, context: CallbackContext):
+async def cmd_select_channel(update: Update, context: CallbackContext, action: str):
+    if not await command_checker(update, context, [State.IDLE, State.ERROR]):
+        return
+
     user = update.effective_user
-    create_user(user)
-    state = get_user_state(user.id)
+    channels = db_get_all_user_channels(user.id)
 
-    if not state:
-        await update.message.reply_text("Shit happened! Use /cancel")
-        return
-    if state not in required_states:
-        await update.message.reply_text("Finish your current task first!")
-        return
-
-    channel = get_all_user_channels(user.id)
-
-    if len(channel) == 0:
+    if len(channels) == 0:
         await update.message.reply_text(
-            "You dont have any channels. Use /add_channel first!"
+            "You don't have any channels. Use /add_channel first!"
         )
         return
 
-    set_user_state(user.id, State.CHANNEL_SETTINGS)
-    await update.message.reply_text(f"Chose channel:\n {get_channel_string(channel)}")
+    db_set_user_state(user.id, State.CHANNEL_SELECT)
+
+    await update.message.reply_text(
+        f"Choose a channel:\n{get_channel_string(channels)}"
+    )
 
 
-async def set_channel(update: Update, context: CallbackContext):
+async def handle_select_channel(update: Update, context: CallbackContext):
+
+    if not await command_checker(update, context, [State.CHANNEL_SELECT]):
+        return
+
     user = update.effective_user
-    create_user(user)
-    user_id = update.effective_user.id
     input = update.effective_message.text
 
     if not input.isdigit():
         await update.message.reply_text(f"Error send normal number or /cancel")
         return
 
-    channels = get_all_user_channels(user_id)
+    channels = db_get_all_user_channels(user.id)
 
     if int(input) > len(channels) or int(input) < 1:
         await update.message.reply_text(f"Error send normal number or /cancel")
         return
+
     await update.message.reply_text(
         f"You choose channel: @{channels[int(input) - 1].username}"
     )
-    set_channel_selected(channels[int(input) - 1].channel_id, user_id)
+
+    db_set_selected_channel(channels[int(input) - 1].channel_id, user.id)
 
     await update.message.reply_text(
         f"Choose you action:\n1. To add chat\n2. To delete channel"
     )
-    set_user_state(user.id, State.CHOOSE_ACTION)
+    db_set_user_state(user.id, State.CHANNEL_SETTINGS)
 
 
-async def choose_action(update: Update, context: CallbackContext):
+async def handle_channel_settings(update: Update, context: CallbackContext):
+    if not await command_checker(update, context, [State.CHANNEL_SETTINGS]):
+        return
+
     user = update.effective_user
-    create_user(user)
-    user_id = update.effective_user.id
     input = update.effective_message.text
 
     if not input.isdigit():
@@ -161,25 +176,29 @@ async def choose_action(update: Update, context: CallbackContext):
         return
 
     if input == "1":
-        set_user_state(user.id, State.ADD_CHAT)
+        db_set_user_state(user.id, State.ADD_CHAT)
         await update.message.reply_text(
             f"Send me your CHAT link or username. Or use /cancel"
         )
     else:
-        del_channel(get_selected_channel(user_id))
-        await update.message.reply_text(f"Noice DELETING CHANNEL")
-        set_user_state(user_id, State.IDLE)
+        db_delete_channel(db_get_selected_channel(user.id).channel_id)
+        await update.message.reply_text(f"You delete channel!")
+        db_set_user_state(user.id, State.IDLE)
 
 
-async def add_channel(
+async def handle_add_channel(
     update: Update,
     context: CallbackContext,
     is_channel: bool = True,
 ) -> None:
+    if not await command_checker(update, context, [State.ADD_CHANNEL, State.ADD_CHAT]):
+        return
+
     input = update.effective_message.text
     user_id = update.effective_user.id
 
     link = check_link(input.strip())
+
     if not link:
         await update.message.reply_text("Wrong link. Try again")
         return
@@ -191,9 +210,10 @@ async def add_channel(
         return
     chat_id = chat_info.id
 
-    if is_channel_exists_for_user(user_id, chat_id):
-        await update.message.reply_text("Channel already added.")
-        return
+    if is_channel:
+        if db_get_channel(user_id, chat_id) != None:
+            await update.message.reply_text("Channel already added.")
+            return
 
     try:
         permission_check = await check_bot_permission(context.bot, chat_info.id)
@@ -212,11 +232,18 @@ async def add_channel(
         "permission": permission_check,
         "user_id": user_id,
     }
+
     if is_channel:
-        create_channel(data, None)
+        db_create_channel_or_chat(data, None)
     else:
-        del_chat(get_channel_chat(get_selected_channel(user_id)))
-        create_channel(data, get_selected_channel(user_id))
+        channel = db_get_selected_channel(user_id)
+        if channel == None:
+            await update.message.reply_text("You dont have selected channel")
+            return
+        chat = db_get_chat_by_channel(channel.chanel_id)
+        if chat != None:
+            db_delete_chat(chat.chat_id)
+        db_create_channel_or_chat(data, channel.channel_id)
 
     await update.message.reply_text("COOL!")
-    set_user_state(user_id, State.IDLE)
+    db_set_user_state(user_id, State.IDLE)

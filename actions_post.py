@@ -1,8 +1,10 @@
 # actions_post.py
 
-import logging
 from collections import defaultdict
+import logging
 from datetime import datetime
+import pytz
+import uuid
 
 from telegram import (
     InputMediaAudio,
@@ -13,20 +15,26 @@ from telegram import (
 )
 from telegram.ext import CallbackContext, CommandHandler
 from telegram.helpers import effective_message_type
-
+from globals import DATE_TIME_FORMAT_PRINT, DATE_TIME_FORMAT
+from send_post_logic import set_post_in_scheduler
+from service_db import State, Post, Message
+from action_db import (
+    db_get_user_state,
+    db_create_user,
+    db_get_selected_channel,
+    db_get_chat_by_channel,
+    db_set_user_state,
+    db_get_all_user_channels,
+    db_set_selected_channel,
+    db_create_post,
+    db_get_channel,
+)
 from actions_chat import get_channel_string
-from actions_user import get_user_data
-from secret import DATE_TIME_FORMAT
-from globals import DATE_TIME_FORMAT_PRINT, save_user_data_to_file
-from message import Message
-from post import Post
-from states import State
-from user_data import Channel
-from utils import log_processing_info
+
+MOSCOW_TZ = pytz.timezone("Europe/Moscow")
 
 logger = logging.getLogger(__name__)
-tmp_post = Post()
-tmp_chat = Channel()
+current_posts = {}
 
 MEDIA_GROUP_TYPES = {
     "photo": InputMediaPhoto,
@@ -36,268 +44,250 @@ MEDIA_GROUP_TYPES = {
 }
 
 
-def reg_post_handlers(application) -> None:
-    # application.add_handler(CommandHandler("posts", cmd_posts))
-    application.add_handler(CommandHandler("add_post", cmd_add_post))
-    application.add_handler(CommandHandler("add_post_chat", cmd_add_post_chat))
-    application.add_handler(CommandHandler("time", cmd_post_time))
-    application.add_handler(CommandHandler("set_channel", cmd_set_channel))
+async def command_checker(
+    update: Update, context: CallbackContext, required_states
+) -> bool:
+    user = update.effective_user
+    db_create_user(user)
+    state = db_get_user_state(user.id)
 
-
-async def actions_post_handlers(update: Update, context: CallbackContext) -> None:
-    user = await get_user_data(update)
-    state = user.state
-
-    if state == State.ADD_POST:
-        await add_message(update, context, "channel")
-    elif state == State.ADD_POST_CHAT:
-        await add_message(update, context, "chat")
-    elif state == State.SET_POST_TIME:
-        await set_post_time(update, context)
-    elif state == State.SET_CHANNEL:
-        await set_channel(update, context)
-    else:
+    if state == None:
         await update.message.reply_text("Shit happened! Use /cancel")
-
-
-async def state_check(update: Update, context: CallbackContext, state_list) -> bool:
-    user = await get_user_data(update)
-
-    if user.state not in state_list and user.state != State.ERROR:
-        await update.message.reply_text(f"Finish you current task {user.state}")
         return False
 
-    elif user.state == State.ERROR or not user.user_has_channel_with_permission():
-        await update.message.reply_text(
-            "You dont have any channels or channel have not required permissions"
-        )
+    if state not in required_states:
+        await update.message.reply_text("Finish your current task first!")
         return False
-
     else:
         return True
 
 
-async def cmd_add_post(update: Update, context: CallbackContext) -> None:
-    global tmp_post
-    user = await get_user_data(update)
-    await log_processing_info(update, "command /add_post")
+async def handle_post_messages(update: Update, context: CallbackContext) -> None:
 
-    if not await state_check(update, context, [State.IDLE, State.ADD_POST]):
-        return
-    if tmp_chat.channel_id == None:
-        await cmd_set_channel(update, context)
-        return
-
-    tmp_post = Post(
-        post_id=update.message.message_id,
-        user_id=user.user_id,
-        channel_id=tmp_chat.channel_id,
-        chat_id=tmp_chat.chat_id,
-        date_time=update.message.date,
-    )
-    user.state = State.ADD_POST
-    try:
-        info = await context.bot.get_chat(tmp_chat.channel_id)
-        username = info.username
-        await update.message.reply_text(
-            f"You create post to @{username}.\nSend me your new Cannel Post. Or use /add_post_chat or /cancel"
-        )
-        return
-    except Exception as e:
-        logger.error({e})
-
-    await update.message.reply_text("Shit happened! Use /cancel")
-
-
-async def cmd_add_post_chat(update: Update, context: CallbackContext) -> None:
-    user = await get_user_data(update)
-    await log_processing_info(update, "command /add_post_chat")
-
-    if not await state_check(update, context, [State.ADD_POST_CHAT, State.ADD_POST]):
-        return
-    if tmp_post.file_id == None:
-        await update.message.reply_text(
-            "You cant send chat messages to this post. Or use /time or /cancel"
-        )
-        user.state = State.SET_POST_TIME
-        await cmd_post_time(update, context)
-        return
-
-    user.state = State.ADD_POST_CHAT
-    await update.message.reply_text(
-        "Send me your Chat messages. Or use /time or /cancel"
-    )
-
-
-async def cmd_post_time(update: Update, context: CallbackContext) -> None:
-    user = await get_user_data(update)
-    await log_processing_info(update, "command /time")
-
-    if not await state_check(
-        update, context, [State.ADD_POST_CHAT, State.SET_POST_TIME]
+    if not await command_checker(
+        update,
+        context,
+        [
+            State.SET_CHANNEL,
+            State.ADD_POST,
+            State.ADD_POST_CHAT,
+            State.SET_POST_TIME,
+        ],
     ):
         return
 
-    user.state = State.SET_POST_TIME
+    user = update.effective_user
+    state = db_get_user_state(user.id)
+
+    if state == State.ADD_POST:
+        await handle_add_message(update, context, "channel")
+    elif state == State.ADD_POST_CHAT:
+        await handle_add_message(update, context, "chat")
+    elif state == State.SET_POST_TIME:
+        await handle_set_post_time(update, context)
+    elif state == State.SET_CHANNEL:
+        await handle_set_channel(update, context)
+    else:
+        await update.message.reply_text("Shit happened! Use /cancel")
+
+
+async def cmd_add_post(update: Update, context: CallbackContext) -> None:
+    if not await command_checker(update, context, [State.IDLE]):
+        return
+
+    user = update.effective_user
+    if user.id in current_posts:
+        del current_posts[user.id]
+
+    channel = db_get_selected_channel(user.id)
+
+    if channel == None:
+        db_set_user_state(user.id, State.SET_CHANNEL)
+        await cmd_set_channel(update, context)
+        return
+
+    if channel.permission == False:
+        await update.message.reply_text("Your channel doesn't have permissions")
+        return
+
+    str = f"Your choose channel @{channel.username}"
+
+    chat = db_get_chat_by_channel(channel.channel_id)
+    if chat != None:
+        if chat.permission:
+            str += f" with chat @{chat.username}"
+
+    await update.message.reply_text(f"{str}\nSend me your new Cannel Posts.")
+    db_set_user_state(user.id, State.ADD_POST)
+
+
+async def cmd_add_post_chat(update: Update, context: CallbackContext) -> None:
+    if not await command_checker(
+        update, context, [State.ADD_POST, State.ADD_POST_CHAT]
+    ):
+        return
+
+    user = update.effective_user
+    if user.id not in current_posts:
+        await update.message.reply_text("First of all you need start adding new post")
+        return
+
+    post = current_posts[user.id]["post"]
+
+    chat = db_get_chat_by_channel(post.channel_id)
+
+    if chat == None:
+        await update.message.reply_text("Your channel doesn't have connected chat")
+        return
+    if not chat.permission:
+        await update.message.reply_text("Your chat doesn't have permissions")
+    channel = db_get_channel(post.user_id, post.channel_id)
+    str = f"Your are posting to channel @{channel.username} with chat @{chat.username}"
+
+    await update.message.reply_text(f"{str}\nSend me your new Chat Posts.")
+    db_set_user_state(user.id, State.ADD_POST_CHAT)
+
+
+async def cmd_post_time(update: Update, context: CallbackContext) -> None:
+    if not await command_checker(
+        update, context, [State.ADD_POST_CHAT, State.SET_POST_TIME, State.ADD_POST]
+    ):
+        return
+    user = update.effective_user
+    if user.id not in current_posts:
+        await update.message.reply_text("First of all you need start adding new post")
+        return
+
     await update.message.reply_text(
         f"Now send the date and time in this format: {DATE_TIME_FORMAT_PRINT}."
     )
+    db_set_user_state(user.id, State.SET_POST_TIME)
 
 
 async def cmd_set_channel(update: Update, context: CallbackContext):
-    user = await get_user_data(update)
-    await log_processing_info(update, "command /set_channel")
-    if not await state_check(update, context, [State.IDLE, State.SET_CHANNEL]):
+    if not await command_checker(update, context, [State.IDLE, State.SET_CHANNEL]):
         return
+    user = update.effective_user
+    if user.id in current_posts:
+        del current_posts[user.id]
+    channels = db_get_all_user_channels(user.id)
 
-    if user.channels == []:
+    if channels == []:
         await update.message.reply_text(f"You dont have any channels")
         return
+
     await update.message.reply_text(
-        f"Chose the channel:\n{await get_channel_string(update, context)}\n And send me number or /cancel"
+        f"Chose the channel:\n{await get_channel_string(channels)}\n And send me number or /cancel"
     )
-    user.state = State.SET_CHANNEL
+    db_set_user_state(user.id, State.SET_CHANNEL)
 
 
-async def set_channel(update: Update, context: CallbackContext):
-    global tmp_chat
-    user = await get_user_data(update)
-    input = update.message.text.strip()
+async def handle_set_channel(update: Update, context: CallbackContext):
+    if not await command_checker(update, context, [State.SET_CHANNEL]):
+        return
+    user = update.effective_user
+    input = update.effective_message.text
+
     if not input.isdigit():
         await update.message.reply_text(f"Error send normal number or /cancel")
         return
 
-    if int(input) > len(user.channels) or int(input) < 1:
+    channels = db_get_all_user_channels(user.id)
+
+    if int(input) > len(channels) or int(input) < 1:
         await update.message.reply_text(f"Error send normal number or /cancel")
         return
 
-    tmp_chat = user.channels[int(input) - 1]
-    await update.message.reply_text(f"Noice CHOOSE CHANNEL")
-    user.state = State.ADD_POST
+    await update.message.reply_text(
+        f"You choose channel: @{channels[int(input) - 1].username}"
+    )
+
+    db_set_selected_channel(channels[int(input) - 1].channel_id, user.id)
+    db_set_user_state(user.id, State.ADD_POST)
     await cmd_add_post(update, context)
 
 
 # Получение основного поста
-async def add_message(update: Update, context: CallbackContext, type) -> None:
-    user = await get_user_data(update)
+async def handle_add_message(update: Update, context: CallbackContext, type) -> None:
+    global current_posts
+    if not await command_checker(
+        update, context, [State.ADD_POST, State.ADD_POST_CHAT]
+    ):
+        return
+    user = update.effective_user
     input = update.effective_message
     media_type = effective_message_type(input)
 
-    if media_type == "text":
-        message = Message(
-            text=input.text,
-            date_time=input.date,
-            message_id=input.message_id,
-            user_id=input.from_user.id,
+    if type == "channel":
+        if user.id not in current_posts:
+            current_posts[user.id] = {}
+        current_posts[user.id]["post"] = Post(
+            post_id=uuid.uuid4(),
+            user_id=user.id,
+            channel_id=db_get_selected_channel(user.id).channel_id,
         )
+        logger.info(f"{current_posts}")
+    else:
+        if current_posts[user.id] == None:
+            await update.message.reply_text(
+                "First of all you need start adding new post"
+            )
+            return
+    data: Message
+    if media_type == "text":
+        data = Message(
+            message_id=input.message_id,
+            post_id=current_posts[user.id]["post"].post_id,
+            text=input.text if input.text else "",
+            is_channel_message=True if type == "channel" else False,
+        )
+        logger.info(f"{data.to_dict()}")
     else:
         file_id = (
             input.photo[-1].file_id
             if input.photo
             else input.effective_attachment.file_id
         )
-        message = Message(
-            caption=input.caption if input.caption else "",  # TODO
-            date_time=input.date,
-            message_id=input.message_id,
-            user_id=input.from_user.id,
+        data = Message(
+            post_id=current_posts[user.id]["post"].post_id,
+            caption=input.caption if input.caption else "",
+            is_channel_message=True if type == "channel" else False,
             file_type=media_type,
             file_id=file_id,
-            media_group_id=(input.media_group_id if input.media_group_id else None),
+            media_group_id=input.media_group_id if input.media_group_id else None,
         )
 
-        if type == "channel":
-            tmp_post.file_id = file_id
+    if "messages" not in current_posts[user.id]:
+        current_posts[user.id]["messages"] = [data]
+    else:
+        current_posts[user.id]["messages"].append(data)
 
-    tmp_post.add_message(message=message, channel_type=type)
 
+async def handle_set_post_time(update: Update, context: CallbackContext) -> None:
+    if not await command_checker(update, context, [State.SET_POST_TIME]):
+        return
+    user = update.effective_user
+    input = update.effective_message.text
 
-# Получение основного поста
-async def set_post_time(update: Update, context: CallbackContext) -> None:
-    user = await get_user_data(update)
+    if current_posts[user.id] == None:
+        await update.message.reply_text("First of all you need start adding new post")
+        return
+
     try:
-        input = update.message.text.strip()
-        post_time = datetime.strptime(input, DATE_TIME_FORMAT)
-
-        if post_time < datetime.now():
+        input = input.strip()
+        post_time = MOSCOW_TZ.localize(datetime.strptime(input, DATE_TIME_FORMAT))
+        if post_time < datetime.now(MOSCOW_TZ):
             await update.message.reply_text("We cant back to past. Try again")
             return
-        tmp_post.date_time = post_time
-
-        tmp_post.update_job_name()
-        user.post = tmp_post
-
+        current_posts[user.id]["post"].date_time = post_time
     except ValueError:
         logger.info(f"{input}")
         await update.message.reply_text("Wrong date format. Try again")
-    await set_post_in_scheduler(update, context, tmp_post)
-    user.state = State.IDLE
+        return
+    post_db = db_create_post(
+        current_posts[user.id]["post"], current_posts[user.id]["messages"]
+    )
+    del current_posts[user.id]
 
-
-async def set_post_in_scheduler(
-    update: Update, context: CallbackContext, post: Post
-) -> None:
-    my_job_queue = context.job_queue
-    i = 0
-    dict = {}
-    for p in post.channel_message:
-        dict[i] = p.to_dict()
-        i += 1
-
-    if not my_job_queue.get_jobs_by_name(post.job_name):
-        my_job_queue.run_once(
-            send_post,
-            when=post.date_time,
-            data=dict,
-            name=post.job_name,
-        )
-
-    logger.info(f"{my_job_queue.get_jobs_by_name(post.job_name)[0].data}")
-
-
-async def send_post(update: Update, context: CallbackContext):
-    data = context.job.data
-    logger.info(f"JOB DATA {data}")
-    # grouped_media_channel = defaultdict(list)
-    # grouped_media_chat = defaultdict(list)
-
-    # for msg in tmp_post.channel_message:
-    #     if msg.file_type is not None:
-    #         media_type = MEDIA_GROUP_TYPES[msg.file_type]
-    #         media_item = media_type(media=msg.file_id, caption=msg.caption)
-    #         grouped_media_channel[msg.media_group_id].append(media_item)
-
-    # # Группируем медиа для чатов
-    # for msg in tmp_post.chat_message:
-    #     if msg.file_type is not None:
-    #         media_type = MEDIA_GROUP_TYPES[msg.file_type]
-    #         media_item = media_type(media=msg.file_id, caption=msg.caption)
-    #         grouped_media_chat[msg.media_group_id].append(media_item)
-
-    # logger.info(f"{grouped_media_channel}")
-
-    # for channel_msg in tmp_post.channel_message:
-    #     if channel_msg.file_type == None:
-    #         await context.bot.send_message(
-    #             chat_id=tmp_chat.channel_id, text=channel_msg.text
-    #         )
-    # for chat_msg in tmp_post.chat_message:
-    #     if chat_msg.file_type == None:
-    #         await context.bot.send_message(chat_id=tmp_chat.chat_id, text=chat_msg.text)
-    # # Отправляем группы медиа для каналов
-    # for media_group in grouped_media_channel.values():
-    #     await context.bot.send_media_group(
-    #         chat_id=tmp_chat.channel_id,
-    #         media=media_group,  # Передаём список объектов InputMedia
-    #         read_timeout=20,
-    #         write_timeout=35,
-    #     )
-
-    # # Отправляем группы медиа для чатов
-    # for media_group in grouped_media_chat.values():
-    #     await context.bot.send_media_group(
-    #         chat_id=tmp_chat.chat_id,
-    #         media=media_group,  # Передаём список объектов InputMedia
-    #         read_timeout=20,
-    #         write_timeout=35,
-    #     )
+    await set_post_in_scheduler(update, context, post_db)
+    db_set_user_state(user.id, State.IDLE)
