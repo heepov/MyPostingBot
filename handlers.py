@@ -13,9 +13,6 @@ from telegram.ext import (
 from action_db import (
     db_create_user,
     db_get_user_state,
-    db_get_post_by_sended_message_id,
-    db_get_messages_by_post,
-    db_get_chat_by_channel,
 )
 from service_db import State
 from actions_chat import (
@@ -50,6 +47,8 @@ def reg_all_handlers(application):
     application.add_handler(CommandHandler("add_post_chat", cmd_add_post_chat))
     application.add_handler(CommandHandler("time", cmd_post_time))
     application.add_handler(CommandHandler("set_channel", cmd_set_channel))
+
+    application.add_handler(ChatMemberHandler(on_chat_member_update))
 
     application.add_handler(
         MessageHandler(
@@ -155,3 +154,31 @@ async def cancel(update: Update, context: CallbackContext) -> None:
 # async def load(update: Update, context: CallbackContext) -> None:
 #     await update.message.reply_text(f"DATA LOAD")
 #     load_user_data_from_file()
+
+
+async def on_chat_member_update(update, context):
+
+    chat_id = update.my_chat_member.chat.id
+    member = update.my_chat_member.new_chat_member
+    bot = await context.bot.get_me()
+
+    if chat_id not in [
+        user_data_manager.get_chat_id(),
+        user_data_manager.get_channel_id(),
+    ]:
+        return
+
+    if member.user.id != bot.id:
+        return
+
+    if member.status == constants.ChatMemberStatus.ADMINISTRATOR:
+        can_post_messages = getattr(member, "can_post_messages", None)
+        if can_post_messages is None:
+            logger.info(f"{SUCCESS_PERMISSION} in the CHAT")
+        elif can_post_messages:
+            logger.info(f"{SUCCESS_PERMISSION} in the CHANNEL")
+        else:
+            logger.info(f"{ERROR_PERMISSIONS} in the CHANNEL")
+            user_data_manager.set_state(ERROR_PERMISSIONS)
+    else:
+        logger.info(f"{ERROR_PERMISSIONS}")
