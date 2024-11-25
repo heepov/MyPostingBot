@@ -3,138 +3,200 @@
 import logging
 
 from telegram import Update
-from telegram.ext import CallbackContext, CommandHandler
+from telegram.ext import CallbackContext
 
-from old.strings import (
-    CHANNEL_SETUP_STRING,
-    CHAT_SETUP_STRING,
-    ERROR_CHANNEL_LINK,
-    ERROR_GET_CHANNEL_INFO,
-    ERROR_PERMISSION_STRING,
+from action_db import (
+    create_channel,
+    create_user,
+    del_channel,
+    del_chat,
+    get_all_user_channels,
+    get_channel_chat,
+    get_selected_channel,
+    get_user_state,
+    is_channel_exists_for_user,
+    set_channel_selected,
+    set_user_state,
 )
-from states import State
-from user_data import Channel
-from utils import check_bot_permission, check_link, log_processing_info
-
-tmp_chat = Channel()
-
-from actions_user import get_user_data
+from service_db import State
+from utils import check_bot_permission, check_link
 
 logger = logging.getLogger(__name__)
-
-
-def reg_chat_handlers(application) -> None:
-    application.add_handler(CommandHandler("channels", cmd_channels))
-    application.add_handler(CommandHandler("add_channel", cmd_add_channel))
-    application.add_handler(CommandHandler("delete_channel", cmd_delete_channel))
+required_states = [State.IDLE, State.ERROR]
 
 
 async def actions_chat_handlers(update: Update, context: CallbackContext) -> None:
-    user = await get_user_data(update)
-    state = user.state
+    global channel_id
+    user = update.effective_user
+    create_user(user)
+    state = get_user_state(user.id)
+    logger.info(f"STATE {state}")
+    if not state:
+        await update.message.reply_text("Shit happened! Use /cancel")
+        return
 
     if state == State.ADD_CHANNEL:
-        await add_channel(update, context, tmp_chat)
+        await add_channel(update, context, True)
+    elif state == State.CHANNEL_SETTINGS:
+        await set_channel(update, context)
+    elif state == State.CHOOSE_ACTION:
+        await choose_action(update, context)
     elif state == State.ADD_CHAT:
-        await add_channel(update, context, tmp_chat)
-    elif state == State.DELETE_CHANNEL:
-        await delete_channel(update, context)
+        await add_channel(update, context, False)
     else:
         await update.message.reply_text("Shit happened! Use /cancel")
 
 
-async def get_channel_string(update: Update, context: CallbackContext) -> str:
-    user = await get_user_data(update)
-    str = ""
+def get_channel_string(channels) -> str:
+    if len(channels) == 0:
+        return f"You dont have any channels"
+
+    str = "Your channels:\n"
     i = 1
-    for channel in user.channels:
-        try:
-            if channel.channel_id and channel.channel_permission:
-                info = await context.bot.get_chat(channel.channel_id)
-                username = info.username
-
-                str += f"{i}. @{username}"
-                if channel.chat_id and channel.chat_permission:
-                    info = await context.bot.get_chat(channel.chat_id)
-                    username = info.username
-
-                    str += f" with chat: @{username}\n"
-                else:
-                    str += "\n"
-        except Exception as e:
-            logger.error({e})
-            return "ERROR"
-        i += 1
+    for channel in channels:
+        if channel.permission:
+            str += f"{i} @{channel.username}"
+            i += 1
+            chat = get_channel_chat(channel.channel_id)
+            if chat != None:
+                if chat.permission:
+                    str += f" connected with chat: @{chat.username}"
+        str += f"\n"
     return str
 
 
 async def cmd_channels(update: Update, context: CallbackContext):
-    user = await get_user_data(update)
-    await log_processing_info(update, "command /my_channels")
+    user = update.effective_user
+    create_user(user)
+    state = get_user_state(user.id)
 
-    if not user.user_has_channel_with_permission():
-        await update.message.reply_text(f"You dont have any channels")
+    if not state:
+        await update.message.reply_text("Shit happened! Use /cancel")
         return
-    else:
-        await update.message.reply_text(
-            f"Your channels:\n{await get_channel_string(update, context)}"
-        )
+
+    channels = get_all_user_channels(user.id)
+
+    await update.message.reply_text(get_channel_string(channels))
 
 
 async def cmd_add_channel(update: Update, context: CallbackContext):
-    global tmp_chat
-    tmp_chat = Channel()
-    user = await get_user_data(update)
-    await log_processing_info(update, "command /add_channel")
+    user = update.effective_user
+    create_user(user)
+    state = get_user_state(user.id)
+
+    if not state:
+        await update.message.reply_text("Shit happened! Use /cancel")
+        return
+    if state not in required_states:
+        await update.message.reply_text("Finish your current task first!")
+        return
 
     await update.message.reply_text(
         "Send me your CHANNEL link or username. Or use /cancel"
     )
-    user.state = State.ADD_CHANNEL
+    set_user_state(user.id, State.ADD_CHANNEL)
 
 
-async def cmd_delete_channel(update: Update, context: CallbackContext):
-    user = await get_user_data(update)
-    await log_processing_info(update, "command /delete_channel")
+async def cmd_set_channel(update: Update, context: CallbackContext):
+    user = update.effective_user
+    create_user(user)
+    state = get_user_state(user.id)
 
-    if user.channels == []:
-        await update.message.reply_text(f"You dont have any channels")
+    if not state:
+        await update.message.reply_text("Shit happened! Use /cancel")
+        return
+    if state not in required_states:
+        await update.message.reply_text("Finish your current task first!")
+        return
+
+    channel = get_all_user_channels(user.id)
+
+    if len(channel) == 0:
+        await update.message.reply_text(
+            "You dont have any channels. Use /add_channel first!"
+        )
+        return
+
+    set_user_state(user.id, State.CHANNEL_SETTINGS)
+    await update.message.reply_text(f"Chose channel:\n {get_channel_string(channel)}")
+
+
+async def set_channel(update: Update, context: CallbackContext):
+    user = update.effective_user
+    create_user(user)
+    user_id = update.effective_user.id
+    input = update.effective_message.text
+
+    if not input.isdigit():
+        await update.message.reply_text(f"Error send normal number or /cancel")
+        return
+
+    channels = get_all_user_channels(user_id)
+
+    if int(input) > len(channels) or int(input) < 1:
+        await update.message.reply_text(f"Error send normal number or /cancel")
         return
     await update.message.reply_text(
-        f"Chose the channel:\n{await get_channel_string(update, context)}\n And send me number or /cancel"
+        f"You choose channel: @{channels[int(input) - 1].username}"
     )
-    user.state = State.DELETE_CHANNEL
+    set_channel_selected(channels[int(input) - 1].channel_id, user_id)
+
+    await update.message.reply_text(
+        f"Choose you action:\n1. To add chat\n2. To delete channel"
+    )
+    set_user_state(user.id, State.CHOOSE_ACTION)
+
+
+async def choose_action(update: Update, context: CallbackContext):
+    user = update.effective_user
+    create_user(user)
+    user_id = update.effective_user.id
+    input = update.effective_message.text
+
+    if not input.isdigit():
+        await update.message.reply_text(f"Error send normal number or /cancel")
+        return
+    if input not in ["1", "2"]:
+        await update.message.reply_text(f"Error send normal number or /cancel")
+        return
+
+    if input == "1":
+        set_user_state(user.id, State.ADD_CHAT)
+        await update.message.reply_text(
+            f"Send me your CHAT link or username. Or use /cancel"
+        )
+    else:
+        del_channel(get_selected_channel(user_id))
+        await update.message.reply_text(f"Noice DELETING CHANNEL")
+        set_user_state(user_id, State.IDLE)
 
 
 async def add_channel(
     update: Update,
     context: CallbackContext,
-    channel_type: Channel,
+    is_channel: bool = True,
 ) -> None:
-    user = await get_user_data(update)
+    input = update.effective_message.text
+    user_id = update.effective_user.id
 
-    # Проверка ссылки
-    link = check_link(update.message.text.strip())
+    link = check_link(input.strip())
     if not link:
-        await update.message.reply_text(ERROR_CHANNEL_LINK)
+        await update.message.reply_text("Wrong link. Try again")
         return
 
     try:
-        # Получение информации о чате
-        channel_info = await context.bot.get_chat(link)
+        chat_info = await context.bot.get_chat(link)
     except Exception as e:
-        await update.message.reply_text(f"{ERROR_GET_CHANNEL_INFO} {e}")
+        await update.message.reply_text(f"Cant get chat info: {e}")
         return
+    chat_id = chat_info.id
 
-    if user.chanel_already_added(channel_info.id):
-        await update.message.reply_text(
-            "Channel already added. If you want add chat for this channel send CHANNEL link or username. Or use /cancel"
-        )
+    if is_channel_exists_for_user(user_id, chat_id):
+        await update.message.reply_text("Channel already added.")
         return
 
     try:
-        # Проверка прав бота в чате
-        permission_check = await check_bot_permission(context.bot, channel_info.id)
+        permission_check = await check_bot_permission(context.bot, chat_info.id)
         if permission_check != True:
             await update.message.reply_text(
                 "Bot doesn't have permission in this channel"
@@ -144,33 +206,17 @@ async def add_channel(
         await update.message.reply_text(f"Some error: {e}")
         return
 
-    if channel_type.channel_id == None:
-        channel_type.channel_id = channel_info.id
-        channel_type.channel_permission = True
-        user.channels.append(channel_type)
-        await update.message.reply_text(
-            f"If you want add chat for this channel send CHAT link or username. Or use /cancel"
-        )
-        user.state = State.ADD_CHAT
+    data = {
+        "channel_id": chat_id,
+        "username": chat_info.username,
+        "permission": permission_check,
+        "user_id": user_id,
+    }
+    if is_channel:
+        create_channel(data, None)
+    else:
+        del_chat(get_channel_chat(get_selected_channel(user_id)))
+        create_channel(data, get_selected_channel(user_id))
 
-    elif channel_type.chat_id == None:
-        channel_type.chat_id = channel_info.id
-        channel_type.chat_permission = True
-        await update.message.reply_text(f"Successfully add channel and chat!")
-        user.state = State.IDLE
-
-
-async def delete_channel(update: Update, context: CallbackContext):
-    user = await get_user_data(update)
-    input = update.message.text.strip()
-    if not input.isdigit():
-        await update.message.reply_text(f"Error send normal number or /cancel")
-        return
-
-    if int(input) > len(user.channels) or int(input) < 1:
-        await update.message.reply_text(f"Error send normal number or /cancel")
-        return
-
-    del user.channels[int(input) - 1]
-    await update.message.reply_text(f"Noice DELETING CHANNEL")
-    user.state = State.IDLE
+    await update.message.reply_text("COOL!")
+    set_user_state(user_id, State.IDLE)

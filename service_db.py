@@ -20,18 +20,22 @@ class BaseModel(Model):
 class State(str, Enum):
     ERROR = "error"
     IDLE = "idle"
+    
     SET_CHANNEL = "set_channel"
     ADD_POST = "add_post"
     ADD_POST_CHAT = "add_post_chat"
     SET_POST_TIME = "set_post_time"
+
     ADD_CHANNEL = "add_channel"
+    CHANNEL_SETTINGS = "channel_settings"
+    CHOOSE_ACTION = "choose_action"
     ADD_CHAT = "add_chat"
-    DELETE_CHANNEL = "delete_channel"
+    
 
 
 # Таблица User
 class User(BaseModel):
-    user_id = IntegerField(primary_key=True)
+    user_id = BigIntegerField(primary_key=True)
     first_name = CharField(max_length=255, null=True)
     last_name = CharField(max_length=255, null=True)
     username = CharField(max_length=255, null=True)
@@ -45,15 +49,16 @@ class User(BaseModel):
 
 # Таблица Channel
 class Channel(BaseModel):
-    channel_id = IntegerField(primary_key=True)
+    channel_id = BigIntegerField(primary_key=True)
     username = CharField(max_length=255, null=True)
     permission = BooleanField(default=False)
     user_id = ForeignKeyField(User, backref="channels", on_delete="CASCADE")
+    last_selected = BooleanField(default=False)
 
 
 # Таблица Chat (только один для одного канала)
 class Chat(BaseModel):
-    chat_id = IntegerField(primary_key=True)
+    chat_id = BigIntegerField(primary_key=True)
     username = CharField(max_length=255, null=True)
     permission = BooleanField(default=False)
     channel_id = ForeignKeyField(

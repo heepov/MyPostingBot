@@ -10,56 +10,54 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-
-# from actions_chat import actions_chat_handlers, reg_chat_handlers
-# from actions_post import actions_post_handlers, reg_post_handlers
-# from actions_user import get_user_data
-# from file_service import load_file, save_file
-# from globals import (
-#     load_user_data_from_file,
-#     posts_queue,
-#     save_user_data_to_file,
-#     user_data_list,
-# )
-# from states import State
-# from utils import log_processing_info
+from action_db import create_user, get_user_state
+from service_db import State
+from actions_chat import (
+    actions_chat_handlers,
+    cmd_add_channel,
+    cmd_channels,
+    cmd_set_channel
+)
+from telegram.helpers import effective_message_type
+from action_db import set_user_state
 
 logger = logging.getLogger(__name__)
 
-from service_db import User, Channel, Chat, Post, Message, db
-
 
 def reg_all_handlers(application):
-
-
-    # reg_post_handlers(application)
-    # reg_chat_handlers(application)
-
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("cancel", cancel))
 
-    # application.add_handler(CommandHandler("cancel", cancel))
-    # application.add_handler(CommandHandler("save", save))
-    # application.add_handler(CommandHandler("load", load))
+    application.add_handler(CommandHandler("channels", cmd_channels))
+    application.add_handler(CommandHandler("add_channel", cmd_add_channel))
+    application.add_handler(CommandHandler("set_channel", cmd_set_channel))
 
-    # application.add_handler(
-    #     MessageHandler(
-    #         filters.ChatType.PRIVATE & ~filters.COMMAND, bot_private_massage_handlers
-    #     )
-    # )
+    # application.add_handler(CommandHandler("delete_channel", cmd_delete_channel))
+
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & ~filters.COMMAND, bot_private_massage_handlers
+        )
+    )
 
 
 # Private message processing (from bot and not command)
-# async def bot_private_massage_handlers(
-#     update: Update, context: CallbackContext
-# ) -> None:
-#     user = await get_user_data(update)
-#     await log_processing_info(update, "message")
+async def bot_private_massage_handlers(
+    update: Update, context: CallbackContext
+) -> None:
+    user = update.effective_user
+    create_user(user)
+    state = get_user_state(user.id)
 
-#     state = user.state
+    if effective_message_type(update.effective_message) != "text":
+        await update.message.reply_text("Wrong input. Try again")
+        return
 
-#     if state in [State.ADD_CHANNEL, State.ADD_CHAT, State.DELETE_CHANNEL]:
-#         await actions_chat_handlers(update, context)
-#         return
+    if state in [State.ADD_CHANNEL, State.ADD_CHAT, State.DELETE_CHANNEL, State.CHANNEL_SETTINGS, State.CHOOSE_ACTION]:
+        await actions_chat_handlers(update, context)
+        return
+
+
 #     if state in [
 #         State.ADD_POST,
 #         State.ADD_POST_CHAT,
@@ -82,22 +80,6 @@ def reg_all_handlers(application):
 async def start(update: Update, context: CallbackContext) -> None:
     message = update.effective_message
 
-    # Проверка, существует ли уже пользователь в базе
-    user, created = User.get_or_create(
-        user_id=message.from_user.id,
-        defaults={
-            'first_name': message.from_user.first_name,
-            'last_name': message.from_user.last_name,
-            'username': message.from_user.username,
-            'language_code': message.from_user.language_code,
-        }
-    )
-
-    if created:
-        print(f"User {user.first_name} created successfully.")
-    else:
-        print(f"User {user.first_name} already exists.")
-
     # user = await get_user_data(update)
     # await log_processing_info(update, "command /start")
     # # save_post_queue_to_file()
@@ -105,7 +87,10 @@ async def start(update: Update, context: CallbackContext) -> None:
     # await update.message.reply_text(f"What's up {user.user_name}?")
 
 
-# async def cancel(update: Update, context: CallbackContext) -> None:
+async def cancel(update: Update, context: CallbackContext) -> None:
+    state = set_user_state(update.effective_user.id, State.IDLE)
+
+
 #     user = await get_user_data(update)
 #     if user.user_has_channel_with_permission():
 #         user.state = State.IDLE
