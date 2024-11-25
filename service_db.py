@@ -2,7 +2,7 @@ from peewee import *
 from datetime import datetime
 from enum import Enum
 
-from secret import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
+from db_conf import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
 
 # Подключение к базе данных
 db = PostgresqlDatabase(

@@ -14,10 +14,12 @@ __pycache__/
 # Ignore development environment
 venv/
 
+.venv/
 # Ignore test files
 test/
 old/
 
 # Ignore specific files
+db_conf.py
 secret.py
 test.py

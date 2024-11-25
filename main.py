@@ -2,7 +2,7 @@
 
 import logging
 from telegram.ext import Application
-from secret import BOT_TOKEN
+from db_conf import BOT_TOKEN
 from utils import setup_logging
 from service_db import db, User, Channel, Chat, Post, Message
 from handlers import reg_all_handlers
