@@ -123,6 +123,39 @@ async def cmd_schedule(update: Update, context: CallbackContext):
     )
 
 
+def schedule_string(channel_id) -> str:
+    posts = db_get_all_post_by_channel_id(channel_id)
+    grouped_by_day = {}
+    today = datetime.today().date()
+
+    for post in posts:
+        post_date = post.date_time.date()
+
+        if post_date < today:
+            continue
+
+        post_str = ""
+        if post_date not in grouped_by_day:
+            grouped_by_day[post_date] = []
+
+        for msg in db_get_messages_by_post(post.post_id):
+            if msg.text is not None:
+                post_str += msg.text.split()[0]
+                break
+            if msg.caption is not None:
+                post_str += msg.caption.split()[0]
+                break
+            post_str += "#error_tag"
+
+        grouped_by_day[post_date].append(post_str)
+
+    result = ""
+    for date, post_ids in grouped_by_day.items():
+        result += f"{date} | {' | '.join(post_ids)}\n"
+
+    return result
+
+
 async def handle_schedule(update: Update, context: CallbackContext):
 
     if not await command_checker(update, context, [State.SCHEDULE]):
@@ -140,15 +173,10 @@ async def handle_schedule(update: Update, context: CallbackContext):
     if int(input) > len(channels) or int(input) < 1:
         await update.message.reply_text(f"Error send normal number or /cancel")
         return
-    channel_id = channels[int(input) - 1].channel_id
-    chat = db_get_chat_by_channel(channel_id)
-    posts = db_schedule_posts(channel_id)
+    channel = channels[int(input) - 1]
+    chat = db_get_chat_by_channel(channel)
 
-    str = f"Channel: @{channels[int(input) - 1].username} with chat @{chat.username}\nSchedule:\n"
-    for post in posts:
-        # post_time = MOSCOW_TZ.localize(datetime.strptime(input, DATE_TIME_FORMAT))
-        # if post.date_time < datetime.now(MOSCOW_TZ):
-        str += f"{post['day']} | {post['count']}\n"
-
+    str = f"Channel: @{channel.username} with chat @{chat.username}\n"
+    str += schedule_string(channel.channel_id)
     await update.message.reply_text(str)
-    db_set_user_state(user.id, State.CHANNEL_SETTINGS)
+    db_set_user_state(user.id, State.IDLE)

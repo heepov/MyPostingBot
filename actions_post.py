@@ -22,7 +22,6 @@ from send_post_logic import set_post_in_scheduler
 from service_db import State, Post, Message
 from action_db import (
     db_get_user_state,
-    db_create_user,
     db_get_selected_channel,
     db_get_chat_by_channel,
     db_set_user_state,
@@ -204,10 +203,11 @@ async def handle_add_message(update: Update, context: CallbackContext, type) -> 
     if type == "channel":
         if user.id not in current_posts:
             current_posts[user.id] = {}
+        channel_id = db_get_selected_channel(user.id)
         current_posts[user.id]["post"] = Post(
             post_id=uuid.uuid4(),
             user_id=user.id,
-            channel_id=db_get_selected_channel(user.id).channel_id,
+            channel_id=channel_id.channel_id,
         )
         logger.info(f"{current_posts}")
     else:
@@ -216,15 +216,17 @@ async def handle_add_message(update: Update, context: CallbackContext, type) -> 
                 "First of all you need start adding new post"
             )
             return
+        
     data: Message
+    
     if media_type == "text":
         data = Message(
             message_id=input.message_id,
             post_id=current_posts[user.id]["post"].post_id,
-            text=input.text if input.text else "",
+            text=(input.text if input.text else "") + f"\n\n@{channel_id.username}",
             is_channel_message=True if type == "channel" else False,
         )
-        logger.info(f"{data.to_dict()}")
+
     else:
         file_id = (
             input.photo[-1].file_id
@@ -233,7 +235,7 @@ async def handle_add_message(update: Update, context: CallbackContext, type) -> 
         )
         data = Message(
             post_id=current_posts[user.id]["post"].post_id,
-            caption=input.caption if input.caption else "",
+            caption=(input.caption if input.caption else "") + f"\n\n@{channel_id.username}",
             is_channel_message=True if type == "channel" else False,
             file_type=media_type,
             file_id=file_id,

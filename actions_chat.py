@@ -7,7 +7,6 @@ from telegram.ext import CallbackContext
 
 from action_db import (
     db_create_channel_or_chat,
-    db_create_user,
     db_delete_channel,
     db_delete_chat,
     db_get_user_channels_with_permission,

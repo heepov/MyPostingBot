@@ -74,17 +74,6 @@ class Post(BaseModel):
     date_time = DateTimeField(null=True)
     sended_message_id = BigIntegerField(null=True)
 
-    def to_dict(self):
-        return {
-            "post_id": self.post_id,
-            "user_id": self.user_id,
-            "channel_id": self.channel_id,
-            "date_time": self.date_time,
-        }
-
-    def __repr__(self):
-        return f"Post(post_id={self.post_id}, user_id={self.user_id}, channel_id={self.channel_id}, date_time = {self.date_time})"
-
 
 # Таблица Message
 class Message(BaseModel):
@@ -97,15 +86,3 @@ class Message(BaseModel):
     file_type = CharField(max_length=20, null=True)
     file_id = CharField(max_length=255, null=True)
     media_group_id = CharField(max_length=255, null=True)
-
-
-    def to_dict(self):
-        return {
-            "message_id": self.message_id,
-            "is_channel_message": self.is_channel_message,
-            "text": self.text,
-            "caption": self.caption,
-            "file_type": self.file_type,
-            "file_id": self.file_id,
-            "media_group_id": self.media_group_id,
-        }
