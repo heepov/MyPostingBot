@@ -30,6 +30,8 @@ class State(str, Enum):
     CHANNEL_SELECT = "channel_select"
     ADD_CHAT = "add_chat"
 
+    SCHEDULE = "schedule"
+
 
 # Таблица User
 class User(BaseModel):

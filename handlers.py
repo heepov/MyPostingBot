@@ -1,6 +1,7 @@
 # handlers.py
 
 import logging
+from telegram import constants
 
 from telegram import Update
 from telegram.ext import (
@@ -13,6 +14,10 @@ from telegram.ext import (
 from action_db import (
     db_create_user,
     db_get_user_state,
+    db_get_all_channels_ids,
+    db_get_all_chats_ids,
+    db_set_channel_permission,
+    db_set_chat_permission,
 )
 from service_db import State
 from actions_chat import (
@@ -38,6 +43,8 @@ logger = logging.getLogger(__name__)
 def reg_all_handlers(application):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CommandHandler("help", help))
+    application.add_handler(CommandHandler("schedule", cmd_schedule))
 
     application.add_handler(CommandHandler("my_channels", cmd_show_channels))
     application.add_handler(CommandHandler("add_channel", cmd_add_channel))
@@ -108,52 +115,23 @@ async def bot_private_massage_handlers(
             return
         await handle_post_messages(update, context)
         return
+
+    elif state == State.IDLE:
+        await start(update, context)
     else:
-        await update.message.reply_text("Hi")
-
-
-#     if state == State.IDLE:
-#         await start(update, context)
-#     elif state == State.ERROR:
-#         await update.message.reply_text(
-#             "You dont have any channels or channel have not required permissions"
-#         )
-#     else:
-#         await update.message.reply_text("Shit happened! Use /cancel")
+        await update.message.reply_text("Shit happened! Use /cancel")
 
 
 async def start(update: Update, context: CallbackContext) -> None:
-    message = update.effective_message
-
-    # user = await get_user_data(update)
-    # await log_processing_info(update, "command /start")
-    # # save_post_queue_to_file()
-    # # save_user_data_to_file()
-    # await update.message.reply_text(f"What's up {user.user_name}?")
+    await update.message.reply_text("Hi! Use /help command!")
 
 
 async def cancel(update: Update, context: CallbackContext) -> None:
     state = db_set_user_state(update.effective_user.id, State.IDLE)
 
 
-#     user = await get_user_data(update)
-#     if user.user_has_channel_with_permission():
-#         user.state = State.IDLE
-#     else:
-#         user.state = State.ERROR
-
-#     await log_processing_info(update, "command /cancel")
-#     await update.message.reply_text("Your last action has been canceled")
-
-
-# async def save(update: Update, context: CallbackContext) -> None:
-#     await update.message.reply_text(f"DATA SAVE")
-#     save_user_data_to_file(user_data_list)
-
-
-# async def load(update: Update, context: CallbackContext) -> None:
-#     await update.message.reply_text(f"DATA LOAD")
-#     load_user_data_from_file()
+async def help(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text("This is help command!")
 
 
 async def on_chat_member_update(update, context):
@@ -161,24 +139,33 @@ async def on_chat_member_update(update, context):
     chat_id = update.my_chat_member.chat.id
     member = update.my_chat_member.new_chat_member
     bot = await context.bot.get_me()
-
-    if chat_id not in [
-        user_data_manager.get_chat_id(),
-        user_data_manager.get_channel_id(),
-    ]:
-        return
-
     if member.user.id != bot.id:
         return
 
     if member.status == constants.ChatMemberStatus.ADMINISTRATOR:
         can_post_messages = getattr(member, "can_post_messages", None)
         if can_post_messages is None:
-            logger.info(f"{SUCCESS_PERMISSION} in the CHAT")
+            permission_change(chat_id, True)
         elif can_post_messages:
-            logger.info(f"{SUCCESS_PERMISSION} in the CHANNEL")
+            permission_change(chat_id, True)
         else:
-            logger.info(f"{ERROR_PERMISSIONS} in the CHANNEL")
-            user_data_manager.set_state(ERROR_PERMISSIONS)
+            permission_change(chat_id, False)
     else:
-        logger.info(f"{ERROR_PERMISSIONS}")
+        permission_change(chat_id, False)
+
+
+def permission_change(chat_id, permission):
+    channel_ids = db_get_all_channels_ids()
+    chat_ids = db_get_all_chats_ids()
+
+    if chat_id in channel_ids:
+        logger.info(
+            f"PERMISSIONS in channel {chat_id} has been changed to {permission}"
+        )
+        db_set_channel_permission(chat_id, permission)
+
+    if chat_id in chat_ids:
+        logger.info(
+            f"PERMISSIONS in channel {chat_id} has been changed to {permission}"
+        )
+        db_set_chat_permission(chat_id, permission)

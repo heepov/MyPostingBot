@@ -6,6 +6,8 @@ from datetime import datetime
 import pytz
 import uuid
 
+from utils import command_checker, get_channel_string
+
 from telegram import (
     InputMediaAudio,
     InputMediaDocument,
@@ -24,12 +26,11 @@ from action_db import (
     db_get_selected_channel,
     db_get_chat_by_channel,
     db_set_user_state,
-    db_get_all_user_channels,
+    db_get_user_channels_with_permission,
     db_set_selected_channel,
     db_create_post,
     db_get_channel,
 )
-from actions_chat import get_channel_string
 
 MOSCOW_TZ = pytz.timezone("Europe/Moscow")
 
@@ -42,24 +43,6 @@ MEDIA_GROUP_TYPES = {
     "document": InputMediaDocument,
     "audio": InputMediaAudio,
 }
-
-
-async def command_checker(
-    update: Update, context: CallbackContext, required_states
-) -> bool:
-    user = update.effective_user
-    db_create_user(user)
-    state = db_get_user_state(user.id)
-
-    if state == None:
-        await update.message.reply_text("Shit happened! Use /cancel")
-        return False
-
-    if state not in required_states:
-        await update.message.reply_text("Finish your current task first!")
-        return False
-    else:
-        return True
 
 
 async def handle_post_messages(update: Update, context: CallbackContext) -> None:
@@ -170,7 +153,7 @@ async def cmd_set_channel(update: Update, context: CallbackContext):
     user = update.effective_user
     if user.id in current_posts:
         del current_posts[user.id]
-    channels = db_get_all_user_channels(user.id)
+    channels = db_get_user_channels_with_permission(user.id)
 
     if channels == []:
         await update.message.reply_text(f"You dont have any channels")
@@ -192,7 +175,7 @@ async def handle_set_channel(update: Update, context: CallbackContext):
         await update.message.reply_text(f"Error send normal number or /cancel")
         return
 
-    channels = db_get_all_user_channels(user.id)
+    channels = db_get_user_channels_with_permission(user.id)
 
     if int(input) > len(channels) or int(input) < 1:
         await update.message.reply_text(f"Error send normal number or /cancel")

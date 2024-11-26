@@ -18,7 +18,6 @@ from action_db import (
     db_set_sended_message_id,
     db_get_post_by_sended_message_id,
 )
-from actions_chat import get_channel_string
 
 MOSCOW_TZ = pytz.timezone("Europe/Moscow")
 

@@ -10,7 +10,7 @@ from action_db import (
     db_create_user,
     db_delete_channel,
     db_delete_chat,
-    db_get_all_user_channels,
+    db_get_user_channels_with_permission,
     db_get_chat_by_channel,
     db_get_selected_channel,
     db_get_user_state,
@@ -19,27 +19,9 @@ from action_db import (
     db_set_user_state,
 )
 from service_db import State
-from utils import check_bot_permission, check_link
+from utils import check_bot_permission, check_link, command_checker, get_channel_string
 
 logger = logging.getLogger(__name__)
-
-
-async def command_checker(
-    update: Update, context: CallbackContext, required_states
-) -> bool:
-    user = update.effective_user
-    db_create_user(user)
-    state = db_get_user_state(user.id)
-    logger.info(f"HERE {state}")
-    if state == None:
-        await update.message.reply_text("Shit happened! Use /cancel")
-        return False
-
-    if state not in required_states:
-        await update.message.reply_text("Finish your current task first!")
-        return False
-    else:
-        return True
 
 
 async def handle_chat_messages(update: Update, context: CallbackContext) -> None:
@@ -71,36 +53,18 @@ async def handle_chat_messages(update: Update, context: CallbackContext) -> None
         await update.message.reply_text("Shit happened! Use /cancel")
 
 
-def get_channel_string(channels) -> str:
-    if len(channels) == 0:
-        return f"You dont have any channels"
-
-    str = ""
-    i = 1
-    for channel in channels:
-        if channel.permission:
-            str += f"{i} @{channel.username}"
-            i += 1
-            chat = db_get_chat_by_channel(channel.channel_id)
-            if chat != None:
-                if chat.permission:
-                    str += f" connected with chat: @{chat.username}"
-        str += f"\n"
-    return str
-
-
 async def cmd_show_channels(update: Update, context: CallbackContext):
     if not await command_checker(update, context, [State.IDLE]):
         return
 
     user = update.effective_user
 
-    channels = db_get_all_user_channels(user.id)
+    channels = db_get_user_channels_with_permission(user.id)
     await update.message.reply_text(f"Your channels:\n{get_channel_string(channels)}")
 
 
 async def cmd_add_channel(update: Update, context: CallbackContext):
-    if not await command_checker(update, context, [State.IDLE, State.ERROR]):
+    if not await command_checker(update, context, [State.IDLE]):
         return
 
     user = update.effective_user
@@ -112,11 +76,11 @@ async def cmd_add_channel(update: Update, context: CallbackContext):
 
 
 async def cmd_select_channel(update: Update, context: CallbackContext, action: str):
-    if not await command_checker(update, context, [State.IDLE, State.ERROR]):
+    if not await command_checker(update, context, [State.IDLE]):
         return
 
     user = update.effective_user
-    channels = db_get_all_user_channels(user.id)
+    channels = db_get_user_channels_with_permission(user.id)
 
     if len(channels) == 0:
         await update.message.reply_text(
@@ -143,7 +107,7 @@ async def handle_select_channel(update: Update, context: CallbackContext):
         await update.message.reply_text(f"Error send normal number or /cancel")
         return
 
-    channels = db_get_all_user_channels(user.id)
+    channels = db_get_user_channels_with_permission(user.id)
 
     if int(input) > len(channels) or int(input) < 1:
         await update.message.reply_text(f"Error send normal number or /cancel")

@@ -105,8 +105,10 @@ def db_get_chat_by_channel(channel_id: int):
         return None
 
 
-def db_get_all_user_channels(user_id: int):
-    return Channel.select().where(Channel.user_id == user_id)
+def db_get_user_channels_with_permission(user_id: int):
+    return Channel.select().where(
+        (Channel.user_id == user_id) & (Channel.permission == True)
+    )
 
 
 def db_delete_channel(channel_id: int):
@@ -151,6 +153,48 @@ def db_set_sended_message_id(post_id, sended_message_id) -> bool:
             Post.update(sended_message_id=sended_message_id)
             .where(Post.post_id == post_id)
             .execute()
+        )
+        if rows_updated > 0:
+            logger.info("запись была обновлена")
+            return True
+        else:
+            logger.info("не было обновлено ни одной записи")
+            return False
+    except Exception as e:
+        logger.info(f"Error updating user state: {e}")
+        return False
+
+
+def db_get_all_channels_ids():
+    return [row[0] for row in Channel.select(Channel.channel_id).tuples()]
+
+
+def db_get_all_chats_ids():
+    return [row[0] for row in Chat.select(Chat.chat_id).tuples()]
+
+
+def db_set_channel_permission(channel_id, permission) -> bool:
+    try:
+        rows_updated = (
+            Channel.update(permission=permission)
+            .where(Channel.channel_id == channel_id)
+            .execute()
+        )
+        if rows_updated > 0:
+            logger.info("запись была обновлена")
+            return True
+        else:
+            logger.info("не было обновлено ни одной записи")
+            return False
+    except Exception as e:
+        logger.info(f"Error updating user state: {e}")
+        return False
+
+
+def db_set_chat_permission(chat_id, permission) -> bool:
+    try:
+        rows_updated = (
+            Chat.update(permission=permission).where(Chat.chat_id == chat_id).execute()
         )
         if rows_updated > 0:
             logger.info("запись была обновлена")
