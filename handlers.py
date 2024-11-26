@@ -36,6 +36,7 @@ from actions_post import (
 from send_post_logic import send_messages_at_comment
 from telegram.helpers import effective_message_type
 from action_db import db_set_user_state
+from utils import cmd_schedule, handle_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,8 @@ async def bot_private_massage_handlers(
             return
         await handle_post_messages(update, context)
         return
-
+    elif state == State.SCHEDULE:
+        await handle_schedule(update, context)
     elif state == State.IDLE:
         await start(update, context)
     else:

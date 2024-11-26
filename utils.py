@@ -1,9 +1,12 @@
 # utils.py
 
+from datetime import datetime
 import logging
-
+from collections import defaultdict
+import pytz
 from telegram import Update
 from telegram.ext import CallbackContext
+from globals import DATE_TIME_FORMAT
 from service_db import State
 from telegram import Bot
 from action_db import (
@@ -11,8 +14,13 @@ from action_db import (
     db_set_user_state,
     db_create_user,
     db_get_user_channels_with_permission,
-    db_get_chat_by_channel
+    db_get_chat_by_channel,
+    db_get_all_post_by_channel_id,
+    db_get_messages_by_post,
+    db_schedule_posts,
 )
+
+MOSCOW_TZ = pytz.timezone("Europe/Moscow")
 
 
 def setup_logging(level=logging.INFO):
@@ -95,7 +103,7 @@ def get_channel_string(channels) -> str:
     return str
 
 
-async def cmd_schedule(update: Update, context: CallbackContext, action: str):
+async def cmd_schedule(update: Update, context: CallbackContext):
     if not await command_checker(update, context, [State.IDLE]):
         return
 
@@ -132,9 +140,15 @@ async def handle_schedule(update: Update, context: CallbackContext):
     if int(input) > len(channels) or int(input) < 1:
         await update.message.reply_text(f"Error send normal number or /cancel")
         return
+    channel_id = channels[int(input) - 1].channel_id
+    chat = db_get_chat_by_channel(channel_id)
+    posts = db_schedule_posts(channel_id)
 
-    chat = db_get_chat_by_channel(channels[int(input) - 1].channel_id)
-    str = f"Channel: @{channels[int(input) - 1].username} with chat @{chat.username}\n Schedule:\n"
-    
-    await update.message.reply_text()
+    str = f"Channel: @{channels[int(input) - 1].username} with chat @{chat.username}\nSchedule:\n"
+    for post in posts:
+        # post_time = MOSCOW_TZ.localize(datetime.strptime(input, DATE_TIME_FORMAT))
+        # if post.date_time < datetime.now(MOSCOW_TZ):
+        str += f"{post['day']} | {post['count']}\n"
+
+    await update.message.reply_text(str)
     db_set_user_state(user.id, State.CHANNEL_SETTINGS)

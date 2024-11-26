@@ -1,4 +1,5 @@
 from peewee import DoesNotExist
+from peewee import fn, Case
 
 import logging
 
@@ -137,6 +138,42 @@ def db_post_by_id(post_id: int):
         return None
 
 
+def db_schedule_posts(channel_id):
+    # Подзапрос: Получаем сообщения, связанные с постами для указанного канала, где is_channel_message = True
+    query = (
+        Post.select(
+            fn.DATE(Post.date_time).alias("post_date"),  # Группируем по дате
+            fn.COUNT(Post.post_id).alias("post_count"),  # Подсчитываем количество постов
+            fn.STRING_AGG(Message.text, ', ').alias("texts"),  # Собираем все тексты в одну строку с разделителем
+            fn.STRING_AGG(Message.caption, ', ').alias("captions")  # Собираем все captions в одну строку с разделителем
+        )
+        .join(Message, on=(Post.post_id == Message.post_id))
+        .where(
+            Post.channel_id == channel_id,
+            Message.is_channel_message == True,
+        )
+        .group_by(fn.DATE(Post.date_time))  # Группируем по дате
+        .order_by(Post.date_time)
+    )
+    
+    # Группируем результат по дате
+    grouped_data = {}
+    for result in query.dicts():  # dicts() возвращает результат в виде словарей
+        post_date = result["post_date"]
+        texts = result["texts"]
+        captions = result["captions"]
+        post_count = result["post_count"]
+
+        if post_date not in grouped_data:
+            grouped_data[post_date] = {
+                "count": post_count,
+                "texts": texts,
+                "captions": captions
+            }
+    
+    return grouped_data
+
+
 def db_get_post_by_sended_message_id(channel_id: int, sended_message_id: int):
     try:
         return Post.get(
@@ -145,6 +182,10 @@ def db_get_post_by_sended_message_id(channel_id: int, sended_message_id: int):
         )
     except DoesNotExist:
         return None
+
+
+def db_get_all_post_by_channel_id(channel_id: int):
+    return Post.select().where(Post.channel_id == channel_id)
 
 
 def db_set_sended_message_id(post_id, sended_message_id) -> bool:
