@@ -74,7 +74,7 @@ def db_add_message(message: Message) -> Message:
         text=message.text,
         caption=message.caption,
         file_type=message.file_type,
-        file_type=message.file_type,
+        file_id=message.file_id,
         media_group_id=message.media_group_id,
     )
     print(f"New Message Added")
