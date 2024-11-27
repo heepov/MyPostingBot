@@ -1,12 +1,12 @@
 from peewee import *
-from datetime import datetime
-from enum import Enum
+from utils.config_reader import config
 
-from db_conf import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
-
-# Подключение к базе данных
 db = PostgresqlDatabase(
-    DB_NAME, user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT
+    config.db_name,
+    user=config.db_user,
+    password=config.db_password.get_secret_value(),
+    host=config.db_host,
+    port=config.db_port,
 )
 
 
@@ -16,23 +16,6 @@ class BaseModel(Model):
         database = db
 
 
-# Enum для состояния пользователя
-class State(str, Enum):
-    IDLE = "idle"
-
-    SET_CHANNEL = "set_channel"
-    ADD_POST = "add_post"
-    ADD_POST_CHAT = "add_post_chat"
-    SET_POST_TIME = "set_post_time"
-
-    ADD_CHANNEL = "add_channel"
-    CHANNEL_SETTINGS = "channel_settings"
-    CHANNEL_SELECT = "channel_select"
-    ADD_CHAT = "add_chat"
-
-    SCHEDULE = "schedule"
-
-
 # Таблица User
 class User(BaseModel):
     user_id = BigIntegerField(primary_key=True)
@@ -40,11 +23,7 @@ class User(BaseModel):
     last_name = CharField(max_length=255, null=True)
     username = CharField(max_length=255, null=True)
     language_code = CharField(max_length=10, null=True)
-    state = CharField(
-        max_length=50,
-        choices=[(state.value, state.name) for state in State],
-        default=State.IDLE,
-    )
+    time_zone = CharField(max_length=50, null=True, default="Europe/Moscow")
 
 
 # Таблица Channel
@@ -53,7 +32,6 @@ class Channel(BaseModel):
     username = CharField(max_length=255, null=True)
     permission = BooleanField(default=False)
     user_id = ForeignKeyField(User, backref="channels", on_delete="CASCADE")
-    last_selected = BooleanField(default=False)
 
 
 # Таблица Chat (только один для одного канала)

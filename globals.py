@@ -1,5 +1,0 @@
-# globals.py
-
-MAX_MEDIA_IN_GROUP = 10
-DATE_TIME_FORMAT = "%Y-%m-%d %H:%M"
-DATE_TIME_FORMAT_PRINT = "YYYY-MM-DD HH:MM"

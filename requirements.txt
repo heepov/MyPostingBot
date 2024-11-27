@@ -1,7 +1,0 @@
-python-telegram-bot==21.7
-telegram
-pytz
-python-telegram-bot[job-queue]
-pydantic
-psycopg2
-peewee psycopg2
