@@ -6,7 +6,7 @@ from aiogram.types import ChatMemberAdministrator, ChatMemberOwner
 logger = logging.getLogger(__name__)
 
 
-async def check_bot_permission(bot: Bot, chat_id: int) -> str:
+async def check_bot_permission(bot: Bot, chat_id: int) -> str|bool:
     try:
         admins = await bot.get_chat_administrators(chat_id)
         bot_id = (await bot.get_me()).id
@@ -23,7 +23,7 @@ async def check_bot_permission(bot: Bot, chat_id: int) -> str:
 
 
 def extract_username_from_link(link: str) -> str | None:
-    
+
     if link.startswith("https://t.me/"):
         return "@" + link.split("https://t.me/")[-1].strip("/")
     elif link.startswith("@"):

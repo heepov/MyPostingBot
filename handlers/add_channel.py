@@ -5,109 +5,162 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from db.db import db_add_channel, db_add_chat
+from db.db import db_add_model
 from handlers.common import cmd_cancel
-from keyboards.simple_row import make_one_line_keyboard
-from db.models import Channel, Chat
+from db.models import Channel
 from handlers.states import AddChannel
 from utils.chat_utils import check_bot_permission, extract_username_from_link
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+)
+
+from utils.app_strings import (
+    STR_ADD_CHANNEL,
+    CMD_ADD_CHANNEL,
+)
+from utils.strings import (
+    MSG_CHANNEL_ADDED,
+    MSG_CHANNEL_AND_CHAT_ADDED,
+    MSG_ERROR,
+    MSG_ERROR_CANT_GET_CHAT,
+    MSG_ERROR_NO_PERMISSION,
+    MSG_ERROR_WRONG_LINK,
+)
+from handlers.common_actions import start_channel_adding
+from keyboards.inline_keyboard import make_inline_binary_keyboard
 
 router = Router()
 logger = logging.getLogger(__name__)
 
 
-add_channel_menu = ["Cancel", "Instruction"]
-add_chat_menu = ["Dont add channel", "Instruction"]
-
-
-@router.message(F.text == "Add channel")
-@router.message(Command("addchannel"))
-async def add_channel_handler(message: Message, state: FSMContext) -> None:
-    await message.answer(
-        text="Add bot to CHANNEL admins and send here link or username",
-        reply_markup=make_one_line_keyboard(add_channel_menu),
-    )
-    await state.set_state(AddChannel.adding_channel)
+@router.message(F.text == STR_ADD_CHANNEL)
+@router.message(Command(CMD_ADD_CHANNEL))
+async def add_channel_cmd_handler(message: Message, state: FSMContext) -> None:
+    await start_channel_adding(message, state)
 
 
 @router.message(AddChannel.adding_channel)
 async def add_channel(message: Message, state: FSMContext, bot: Bot) -> None:
-
-    chat_data = await check_and_get_chat(message, bot, message.text)
-    if not chat_data:
-        return
-
-    channel = Channel(
-        channel_id=chat_data["id"],
-        username=chat_data["username"],
-        permission=chat_data["permission"],
-        user_id=message.from_user.id,
-    )
-
-    db_add_channel(channel)
-
-    await state.update_data(
-        channel_id=chat_data["id"], channel_username=chat_data["username"]
-    )
-    await message.answer(
-        text=f"You added Channel @{chat_data["username"]}.\n\nIf you want to add chat, send here link or username.",
-        reply_markup=make_one_line_keyboard(add_chat_menu),
-    )
-    await state.set_state(AddChannel.adding_chat)
-
-
-@router.message(AddChannel.adding_chat)
-async def add_chat(message: Message, state: FSMContext, bot: Bot) -> None:
-
-    chat_data = await check_and_get_chat(message, bot, message.text)
-    if not chat_data:
-        return
-
-    data = await state.get_data()
-
-    chat = Chat(
-        chat_id=chat_data["id"],
-        username=chat_data["username"],
-        permission=chat_data["permission"],
-        channel_id=data.get("channel_id"),
-    )
-
-    db_add_chat(chat)
-
-    await message.answer(
-        f"Channel @{data.get("channel_username")} with linked Chat @{chat_data["username"]} successfully added!"
-    )
-
-    await state.update_data(
-        chat_id=chat_data["id"], chat_username=chat_data["username"]
-    )
-
-    await cmd_cancel(message, state)
-
-
-async def check_and_get_chat(message: Message, bot: Bot, string: str) -> dict | None:
-    link = extract_username_from_link(string.strip())
+    link = extract_username_from_link(message.text.strip())
+    await state.update_data(user_id=message.from_user.id)
     if not link:
-        await message.answer("Wrong link. Try again.")
-        return None
+        await message.answer(MSG_ERROR_WRONG_LINK)
+        return
+
+    channel = await check_get_channel(bot, link)
+
+    if isinstance(channel, str):
+        await message.answer(channel)
+        return
+
+    if channel["chat_id"]:
+        chat = await check_get_chat(bot, channel["chat_id"])
+
+        if isinstance(chat, str):
+            await message.answer(chat)
+            await state.update_data(channel=channel)
+            await state.set_state(AddChannel.confirming_without_chat)
+
+            await message.answer(
+                text=f"Do you want to add Channel @{channel['channel_username']} without Chat? Chat error is {chat}.",
+                reply_markup=make_inline_binary_keyboard(
+                    "confirm_without_chat", "cancel_add_channel"
+                ),
+            )
+            return
+        else:
+            await add_channel_to_db(message, state, bot, channel, chat)
+            return
+
+    await add_channel_to_db(message, state, bot, channel, None)
+
+
+@router.callback_query(lambda c: c.data == "confirm_without_chat")
+async def confirm_without_chat(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    channel = data.get("channel")
+    await add_channel_to_db(callback.message, state, bot, channel, None)
+    await callback.message.delete_reply_markup()
+
+
+@router.callback_query(lambda c: c.data == "cancel_add_channel")
+async def cancel_add_channel(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await callback.message.answer("Channel addition cancelled.")
+    await callback.message.delete_reply_markup()
+    await callback.message.delete()
+    await cmd_cancel(callback.message, state, bot)
+
+
+async def add_channel_to_db(
+    message: Message, state: FSMContext, bot: Bot, channel: dict, chat: dict | None
+):
+    channel_db = Channel(
+        channel_id=channel["channel_id"],
+        channel_username=channel["channel_username"],
+        channel_permission=channel["channel_permission"],
+        user_id=(await state.get_data())["user_id"],
+        chat_id=chat["chat_id"] if chat is not None else None,
+        chat_username=chat["chat_username"] if chat is not None else None,
+        chat_permission=chat["chat_permission"] if chat is not None else None,
+    )
+
+    if chat == None:
+        await message.answer(
+            text=f"You added Channel @{channel['channel_username']} without Chat.",
+        )
+    else:
+        await message.answer(
+            text=f"You added Channel @{channel['channel_username']} with Chat @{chat['chat_username']}",
+        )
+
+    db_add_model(channel_db)
+    await cmd_cancel(message, state, bot)
+
+
+async def check_get_channel(bot: Bot, link: str) -> dict | str:
+
     try:
         chat_info = await bot.get_chat(link)
-        chat_id = chat_info.id
     except Exception as e:
-        await message.answer(f"Can't get chat info: {e}")
-        return None
+        return MSG_ERROR_CANT_GET_CHAT
+
+    if chat_info.type != "channel":
+        return "Wrong channel type"
 
     try:
-        permission_check = await check_bot_permission(bot, chat_id)
+        permission_check = await check_bot_permission(bot, chat_info.id)
         if permission_check is not True:
-            await message.answer("Bot doesn't have permission in this channel.")
-            return None
+            return MSG_ERROR_NO_PERMISSION
     except Exception as e:
-        await message.answer(f"Some error: {e}")
-        return None
+        return MSG_ERROR_NO_PERMISSION
 
     return {
-        "id": chat_id,
-        "username": chat_info.username,
-        "permission": permission_check,
+        "channel_id": chat_info.id,
+        "channel_username": chat_info.username,
+        "channel_permission": True,
+        "chat_id": chat_info.linked_chat_id,
+    }
+
+
+async def check_get_chat(bot: Bot, chat_id: int) -> dict | str:
+    try:
+        chat_info = await bot.get_chat(chat_id)
+    except Exception as e:
+        return MSG_ERROR_CANT_GET_CHAT
+
+    if chat_info.type != "supergroup":
+        return "Wrong chat type"
+
+    try:
+        permission_check = await check_bot_permission(bot, chat_info.id)
+        if permission_check is not True:
+            return MSG_ERROR_NO_PERMISSION
+    except Exception as e:
+        return MSG_ERROR_NO_PERMISSION
+
+    return {
+        "chat_id": chat_info.id,
+        "chat_username": chat_info.username,
+        "chat_permission": True,
     }

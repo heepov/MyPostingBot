@@ -5,9 +5,10 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from db.db import create_tables, connect_db
-from handlers import add_channel, common
+from handlers import add_channel, common, add_post, select_channel
 from utils.config_reader import config
 from utils.utils import setup_logging
+from middlewares.bot_middleware import BotMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,14 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
     bot = Bot(config.bot_token.get_secret_value())
 
-    dp.include_router(common.router)
-    dp.include_router(add_channel.router)
+    dp.message.middleware.register(BotMiddleware(bot))
 
+
+    dp.include_router(add_channel.router)
+    dp.include_router(add_post.router)
+    dp.include_router(select_channel.router)
+    dp.include_router(common.router)
+    
     await dp.start_polling(bot)
 
 

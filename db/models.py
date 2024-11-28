@@ -15,7 +15,6 @@ class BaseModel(Model):
     class Meta:
         database = db
 
-
 # Таблица User
 class User(BaseModel):
     user_id = BigIntegerField(primary_key=True)
@@ -29,19 +28,16 @@ class User(BaseModel):
 # Таблица Channel
 class Channel(BaseModel):
     channel_id = BigIntegerField(primary_key=True)
-    username = CharField(max_length=255, null=True)
-    permission = BooleanField(default=False)
+    channel_username = CharField(max_length=255, null=True)
+    channel_permission = BooleanField(default=False)
+    channel_caption = CharField(max_length=255, null=True)
+
+    chat_id = BigIntegerField(null=True)
+    chat_username = CharField(max_length=255, null=True)
+    chat_permission = BooleanField(null=True)
+    chat_caption = CharField(max_length=255, null=True)
+    
     user_id = ForeignKeyField(User, backref="channels", on_delete="CASCADE")
-
-
-# Таблица Chat (только один для одного канала)
-class Chat(BaseModel):
-    chat_id = BigIntegerField(primary_key=True)
-    username = CharField(max_length=255, null=True)
-    permission = BooleanField(default=False)
-    channel_id = ForeignKeyField(
-        Channel, backref="chat", unique=True, on_delete="CASCADE"
-    )
 
 
 # Таблица Post

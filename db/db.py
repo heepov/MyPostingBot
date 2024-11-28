@@ -1,7 +1,7 @@
 import logging
 from peewee import *
 
-from db.models import Channel, Chat, Message, Post, User, db
+from db.models import Channel, Message, Post, User, db, BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -18,64 +18,76 @@ def close_db() -> None:
 
 def delete_db() -> None:
     if not db.is_closed():
-        db.drop_tables([User, Channel, Chat, Post, Message])
+        db.drop_tables([User, Channel, Post, Message])
 
 
 def create_tables() -> None:
-    db.create_tables([User, Channel, Chat, Post, Message])
+    db.create_tables([User, Channel, Post, Message])
 
 
-def db_add_user(user: User) -> None:
-    User.get_or_create(
-        user_id=user.user_id,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        username=user.username,
-        language_code=user.language_code,
+def db_add_model(model: BaseModel) -> BaseModel:
+    """Generic function to save or update any model instance"""
+    try:
+        unique_key = None
+
+        # Определяем уникальное поле (например, user_id или channel_id)
+        for key in model._meta.sorted_field_names:
+            if "id" in key and key != "id":  # Находим уникальный идентификатор
+                unique_key = key
+                break
+
+        if not unique_key:
+            raise ValueError(
+                f"Cannot determine unique key for {model.__class__.__name__}"
+            )
+
+        # Получаем или создаем объект
+        instance, created = type(model).get_or_create(
+            **{unique_key: getattr(model, unique_key)},
+            defaults={
+                field: getattr(model, field)
+                for field in model._meta.sorted_field_names
+                if field != unique_key
+            },
+        )
+
+        # Если объект уже существует, обновляем его поля
+        if not created:
+            for field in model._meta.sorted_field_names:
+                if field != unique_key:
+                    setattr(instance, field, getattr(model, field))
+            instance.save()
+
+        logger.info(f"{'Created' if created else 'Updated'} {model.__class__.__name__}")
+
+        return instance
+
+    except Exception as e:
+        logger.error(f"Error in db_add_model: {e}")
+        raise
+
+
+def db_get_channels_by_user_id(user_id: int) -> list[Channel]:
+    return list(
+        Channel.select().where(
+            (Channel.user_id == user_id) & (Channel.channel_permission == True)
+        )
     )
-    print(f"New User Added")
 
 
-def db_add_channel(channel: Channel) -> None:
-    Channel.get_or_create(
-        channel_id=channel.channel_id,
-        username=channel.username,
-        permission=channel.permission,
-        user_id=channel.user_id,
-    )
-    print(f"New Channel Added")
+def db_get_channel_by_channel_id(channel_id: int) -> Channel | None:
+    try:
+        return Channel.get(
+            (Channel.channel_id == channel_id) & (Channel.channel_permission == True)
+        )
+    except Channel.DoesNotExist:
+        logger.warning(f"Channel {channel_id} not found or no permission")
+        return None
 
 
-def db_add_chat(chat: Chat) -> None:
-    Chat.get_or_create(
-        chat_id=chat.chat_id,
-        username=chat.username,
-        permission=chat.permission,
-        channel_id=chat.channel_id,
-    )
-    print(f"New Chat Added")
-
-
-def db_add_post(post: Post) -> Post:
-    post_db = Post.get_or_create(
-        user_id=post.user_id,
-        channel_id=post.channel_id,
-        date_time=post.date_time,
-        sended_message_id=post.sended_message_id,
-    )
-    print(f"New Post Added")
-    return post_db
-
-
-def db_add_message(message: Message) -> Message:
-    message_db = Message.get_or_create(
-        post_id=message.post_id,
-        is_channel_message=message.is_channel_message,
-        text=message.text,
-        caption=message.caption,
-        file_type=message.file_type,
-        file_id=message.file_id,
-        media_group_id=message.media_group_id,
-    )
-    print(f"New Message Added")
-    return message_db
+def db_user_by_user_id(user_id: int) -> User | None:
+    try:
+        return User.get(User.user_id == user_id)
+    except User.DoesNotExist:
+        logger.warning(f"User {user_id} not found")
+        return None
