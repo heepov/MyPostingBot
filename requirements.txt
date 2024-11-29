@@ -1,0 +1,7 @@
+aiogram
+pydantic_settings
+peewee
+psycopg2-binary 
+apscheduler
+pytz
+aiogram-calendar

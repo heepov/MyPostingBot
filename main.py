@@ -1,26 +1,41 @@
-# main.py
+import asyncio
 import logging
 
-from telegram.ext import Application
+from aiogram import Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 
-from constants import BOT_TOKEN
-from user_data_manager import user_data_manager
-from utils import setup_logging, files_cleaner
-from handlers import register_all_handlers
-
-setup_logging()
-logger = logging.getLogger(__name__)
-
-files_cleaner()
+from config import setup_logging
+from src.db import connect_db, create_tables
+from src.bot.handlers import routers
+from src.bot.middlewares import LoggingMiddleware
+from src.services.scheduler_service import PostScheduler
+from src.bot.bot_instance import bot
 
 
-def main() -> None:
-    application = Application.builder().token(BOT_TOKEN).build()
-    user_data_manager.get_state()
+async def main():
+    setup_logging()
+    connect_db()
+    create_tables()
 
-    register_all_handlers(application)
-    application.run_polling()
+    dp = Dispatcher(storage=MemoryStorage())
+
+    # Создаем планировщик
+    scheduler = PostScheduler(bot)
+    scheduler.start()
+
+    try:
+        dp.callback_query.middleware(LoggingMiddleware())
+        dp.message.middleware(LoggingMiddleware())
+
+        for router in routers:
+            router.callback_data = {"scheduler": scheduler}
+            dp.include_router(router)
+
+        await dp.start_polling(bot)
+    finally:
+        scheduler.shutdown()
+        await bot.session.close()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
