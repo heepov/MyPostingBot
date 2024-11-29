@@ -1,25 +1,10 @@
-# Ignore IDE and editor specific files
-.env
-.venv
-.vscode
-
 *.DS_Store
 *.json
 *.log
 *.code-workspace
 
-# Ignore Python bytecode files
-__pycache__/
-
-# Ignore development environment
-venv/
-
 .venv/
-# Ignore test files
-test/
-0_old/
-
-# Ignore specific files
-db_conf.py
-secret.py
-test.py
+venv/
+__pycache__/
+.vscode/
+.env
