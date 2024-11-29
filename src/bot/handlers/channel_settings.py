@@ -135,10 +135,11 @@ async def process_add_chat(callback: CallbackQuery, state: FSMContext, bot: Bot)
         await callback.answer(message)
 
     await edit_message_if_changed(
+        callback.message,
         CHANNEL_SETTINGS.format(
             channel_name=channel.channel_title or channel.channel_username
         ),
-        reply_markup=get_channel_settings_keyboard(channel),
+        get_channel_settings_keyboard(channel),
     )
 
 
