@@ -68,6 +68,3 @@ def setup_logging(level=logging.INFO):
     logging.basicConfig(
         level=level, handlers=[console_handler, main_handler, error_handler]
     )
-
-    # Настроим уровень логирования для httpx
-    # logging.getLogger("httpx").setLevel(logging.WARNING)
