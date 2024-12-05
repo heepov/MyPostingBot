@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from config import setup_logging
 from src.db import connect_db, create_tables
 from src.bot.handlers import routers
-from src.bot.middlewares import LoggingMiddleware
+from src.bot.middlewares import LoggingMiddleware, AdminMiddleware
 from src.services.scheduler_service import PostScheduler
 from src.bot.bot_instance import bot
 
@@ -24,6 +24,9 @@ async def main():
     scheduler.start()
 
     try:
+        dp.callback_query.middleware(AdminMiddleware())
+        dp.message.middleware(AdminMiddleware())
+
         dp.callback_query.middleware(LoggingMiddleware())
         dp.message.middleware(LoggingMiddleware())
 
