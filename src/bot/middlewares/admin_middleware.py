@@ -1,6 +1,7 @@
 from typing import Any, Awaitable, Callable, Dict
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery
+from aiogram.enums import ChatType
 from config import config
 
 class AdminMiddleware(BaseMiddleware):
@@ -10,6 +11,9 @@ class AdminMiddleware(BaseMiddleware):
         event: Message | CallbackQuery,
         data: Dict[str, Any]
     ) -> Any:
+        if isinstance(event, Message) and event.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+            return await handler(event, data)
+
         user_id = event.from_user.id if isinstance(event, Message) else event.from_user.id
 
         if user_id not in config.admin_user_ids:
