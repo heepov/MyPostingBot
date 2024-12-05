@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     log_error_file_path: str
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    admin_user_ids: list[int]
 
 
 config = Settings()
