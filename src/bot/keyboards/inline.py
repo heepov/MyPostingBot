@@ -77,9 +77,18 @@ async def get_posts_keyboard(channel_id: int, offset: int = 0) -> InlineKeyboard
         row_buttons = []
         for post in posts[i : i + POSTS_PER_ROW]:
             preview, chat_count = await get_post_preview(post.post_id)
-            text = f"{post.date_time.strftime('%d.%m %H:%M') if post.date_time else 'Время не задано'} | {preview}..."
+            # Сокращаем превью до 15 символов вместо 20
+            preview = preview[:15] + "..." if len(preview) > 15 else preview
+            # Форматируем дату более компактно
+            date_str = post.date_time.strftime("%d.%m")
+            time_str = post.date_time.strftime("%H:%M")
+
+            # Формируем текст кнопки в более компактном виде
+            text = f"{date_str} {time_str}"
             if chat_count > 0:
-                text += f" [{chat_count}]"
+                text = f"{text} [{chat_count}]"
+            text = f"{text} | {preview}"
+
             row_buttons.append(
                 InlineKeyboardButton(
                     text=text, callback_data=f"select_post:{post.post_id}"

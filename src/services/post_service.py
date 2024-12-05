@@ -120,7 +120,6 @@ async def get_post_preview(post_id: int) -> tuple[str, int]:
             else "Нет текста"
         )
         preview = preview[:20] if len(preview) > 20 else preview
-
         # Считаем количество сообщений для чата
         chat_count = (
             Messages.select()
@@ -131,9 +130,8 @@ async def get_post_preview(post_id: int) -> tuple[str, int]:
         )
 
         return preview, chat_count
-    except Exception as e:
-        logger.error(f"Error getting post preview: {e}")
-        return "Ошибка превью", 0
+    except Exception:
+        return "None", 0
 
 
 async def get_post(post_id: int) -> Posts:
